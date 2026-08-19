@@ -1,0 +1,46 @@
+<div style="display:flex;justify-content:center;align-items:center;height:100vh;background:linear-gradient(180deg, #800000 0%, #5a1a1a 25%, #888888 70%, #999999 100%);">
+  <div style="background:white;padding:48px 40px;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,0.2);width:400px;max-width:90vw;text-align:center;">
+    
+    <div style="margin-bottom:32px;">
+      <h1 style="color:#800000;font-size:28px;font-weight:700;margin:0 0 8px 0;">Explora Leads Portal</h1>
+      <p style="color:#666;font-size:13px;margin:0;">Powered by Dan Brent Uy</p>
+    </div>
+
+    <p style="color:#999;font-size:12px;margin-top:24px;">
+      Enter your credentials to access the CRM
+    </p>
+
+    <form onsubmit="handleLogin(event)">
+      
+      <div style="margin-bottom:20px;text-align:left;">
+        <label style="display:block;color:#333;font-size:14px;font-weight:500;margin-bottom:8px;">Email</label>
+        <input type="text" id="username" placeholder="Enter your email" required autofocus style="width:100%;padding:14px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;outline:none;box-sizing:border-box;">
+      </div>
+
+      <div style="margin-bottom:20px;text-align:left;">
+        <label style="display:block;color:#333;font-size:14px;font-weight:500;margin-bottom:8px;">Password</label>
+        <input type="password" id="password" placeholder="Enter your password" required style="width:100%;padding:14px;border:2px solid #e0e0e0;border-radius:8px;font-size:15px;outline:none;box-sizing:border-box;">
+      </div>
+
+      <!-- Sign In Button -->
+      <button type="submit" id="loginButton" style="width:100%;padding:14px;background:#800000;color:white;border:none;border-radius:8px;font-size:16px;font-weight:600;cursor:pointer;">
+        Sign In
+      </button>
+
+      <!-- Sign Up Button -->
+      <div style="margin-top:16px;font-size:13px;color:#777;">
+        Don't have an account yet?
+        <a href="signup.html" style="color:#800000;font-weight:600;text-decoration:none;">
+          Sign Up
+        </a>
+      </div>
+
+      <div id="loginError" style="color:#d32f2f;font-size:13px;margin-top:12px;display:none;padding:8px;background:#ffebee;border-radius:6px;"></div>
+    </form>
+
+    <button type="button" id="forgotButton" style="background:none;border:none;color:#800000;font-size:14px;font-weight:500;cursor:pointer;margin-top:12px;">
+      Forgot Password?
+    </button>
+
+  </div>
+</div>

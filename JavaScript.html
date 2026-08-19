@@ -1,0 +1,420 @@
+<script>
+var SESSION_ID = null;
+var currentUser = null;
+var showingAllActivity = false;
+var confirmCallback = null;
+var isSubmitting = false;
+var currentTimeZone = 'America/Los_Angeles';
+var activeStatusFilter = null;
+
+(function() {
+  var stored = sessionStorage.getItem('crm_session');
+  if (stored) { 
+    SESSION_ID = stored; 
+    google.script.run.withSuccessHandler(function(u) { 
+      if (u && u.name) { currentUser = u; showMain(); populateUser(); } 
+    }).getUserFromCache(SESSION_ID); 
+  }
+})();
+
+function showMain() {
+  document.getElementById('loginScreen').style.display = 'none';
+  var m = document.getElementById('mainScreen'); 
+  m.style.display = 'flex'; 
+  m.style.flexDirection = 'column'; 
+  m.style.height = '100vh'; 
+  m.style.width = '100vw'; 
+  m.style.background = 'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
+  updateClock(); 
+  setInterval(updateClock, 1000); 
+  loadEntries();
+}
+
+function updateClock() { 
+  var d = new Date(), el = document.getElementById('currentDate'); 
+  if (el) el.textContent = d.toLocaleString('en-US', {timeZone: currentTimeZone, weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}); 
+}
+
+function populateUser() {
+  if (!currentUser) return;
+  var p = currentUser.name.split(' ').filter(Boolean), 
+      ini = p.length > 1 ? (p[0][0]+p[p.length-1][0]).toUpperCase() : (p[0]||'').substring(0,2).toUpperCase();
+  document.getElementById('avatar').textContent = ini; 
+  document.getElementById('userName').textContent = currentUser.name; 
+  document.getElementById('userEmail').textContent = currentUser.email || '';
+}
+
+function handleLogin(e) {
+  e.preventDefault(); 
+  var u = document.getElementById('username').value.trim(), 
+      p = document.getElementById('password').value, 
+      b = document.getElementById('loginButton'), 
+      er = document.getElementById('loginError');
+  er.style.display = 'none'; 
+  if (!u || !p) { er.textContent = 'Please enter username and password.'; er.style.display = 'block'; return; }
+  b.disabled = true; b.textContent = 'Signing in...';
+  google.script.run.withSuccessHandler(function(r) { 
+    b.disabled = false; b.textContent = 'Sign In';
+    if (r.success) { 
+      SESSION_ID = r.sessionId; 
+      currentUser = r.user; 
+      sessionStorage.setItem('crm_session', SESSION_ID); 
+      populateUser(); 
+      showMain(); 
+    } else { 
+      er.textContent = r.message; er.style.display = 'block'; 
+    } 
+  }).loginUser(u, p);
+}
+
+function handleLogout() { 
+  if (SESSION_ID) google.script.run.logoutUser(SESSION_ID); 
+  sessionStorage.removeItem('crm_session'); 
+  SESSION_ID = null; currentUser = null; 
+  document.getElementById('mainScreen').style.display = 'none'; 
+  document.getElementById('loginScreen').style.display = 'block'; 
+}
+
+function showToast(message, type) { 
+  var toast = document.getElementById('toast'); 
+  toast.textContent = message; 
+  toast.className = 'toast ' + (type || 'success'); 
+  toast.style.display = 'block'; 
+  clearTimeout(toast._timeout); 
+  toast._timeout = setTimeout(function() { toast.style.display = 'none'; }, 5000); 
+}
+
+function showConfirm(title, message, onConfirm, confirmColor) { 
+  document.getElementById('confirmTitle').textContent = title || 'Confirm'; 
+  document.getElementById('confirmMessage').innerHTML = message || 'Are you sure?'; 
+  document.getElementById('confirmBtn').style.background = confirmColor || '#d32f2f'; 
+  document.getElementById('confirmOverlay').style.display = 'flex'; 
+  confirmCallback = onConfirm; 
+}
+
+function closeConfirm(confirmed) { 
+  document.getElementById('confirmOverlay').style.display = 'none'; 
+  if (confirmed && typeof confirmCallback === 'function') { 
+    var cb = confirmCallback; confirmCallback = null; 
+    cb(); 
+  } 
+}
+
+// ========== ENTRY MODAL ==========
+function openEntryModal() { 
+  document.getElementById('entryAuthorName').value = ''; 
+  document.getElementById('entryEmail').value = ''; 
+  document.getElementById('entryBook').value = ''; 
+  document.getElementById('entryISBN').value = ''; 
+  document.getElementById('entryAddress').value = ''; 
+  document.getElementById('entryError').style.display = 'none'; 
+  document.getElementById('phoneNumbersContainer').innerHTML = '<div style="display:flex;gap:8px;margin-bottom:8px;"><input type="text" class="entryPhone" placeholder="+1 234 567 8900" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;"><button type="button" onclick="removePhoneField(this)" style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;display:none;">Remove</button></div>'; 
+  updateEntrySubmitButton(); 
+  document.getElementById('addEntryModal').style.display = 'flex'; 
+  document.getElementById('entryAuthorName').focus(); 
+}
+
+function closeEntryModal() { document.getElementById('addEntryModal').style.display = 'none'; }
+
+function addPhoneField() { 
+  var c = document.getElementById('phoneNumbersContainer'), d = document.createElement('div'); 
+  d.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;'; 
+  d.innerHTML = '<input type="text" class="entryPhone" placeholder="+1 234 567 8900" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;"><button type="button" onclick="removePhoneField(this)" style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;">Remove</button>'; 
+  c.appendChild(d); updateRemoveButtons(); 
+}
+
+function removePhoneField(b) { 
+  var c = document.getElementById('phoneNumbersContainer'); 
+  if (c.children.length > 1) { b.parentElement.remove(); updateRemoveButtons(); } 
+}
+
+function updateRemoveButtons() { 
+  var rb = document.getElementById('phoneNumbersContainer').querySelectorAll('button'); 
+  if (rb.length <= 1) rb.forEach(function(b) { b.style.display = 'none'; }); 
+  else rb.forEach(function(b) { b.style.display = 'inline-block'; }); 
+}
+
+function updateEntrySubmitButton() { 
+  var an = document.getElementById('entryAuthorName').value.trim(), 
+      bk = document.getElementById('entryBook').value.trim(), 
+      is = document.getElementById('entryISBN').value.trim(); 
+  var b = document.getElementById('entrySubmitBtn'); 
+  b.disabled = !(an && bk && is); 
+  b.style.opacity = b.disabled ? '0.5' : '1'; 
+}
+
+function submitEntry(e) { 
+  e.preventDefault(); 
+  if (isSubmitting) return; 
+  isSubmitting = true; 
+  var an = document.getElementById('entryAuthorName').value.trim(), 
+      bk = document.getElementById('entryBook').value.trim(), 
+      is = document.getElementById('entryISBN').value.trim(), 
+      em = document.getElementById('entryEmail').value.trim(), 
+      ad = document.getElementById('entryAddress').value.trim(); 
+  var pi = document.querySelectorAll('.entryPhone'), ph = []; 
+  pi.forEach(function(i) { var v = i.value.trim(); if (v) ph.push(v); }); 
+  var er = document.getElementById('entryError'); 
+  er.style.display = 'none'; 
+  if (!an || !bk || !is) { er.textContent = 'Author Name, Book, and ISBN are required.'; er.style.display = 'block'; isSubmitting = false; return; } 
+  google.script.run.withSuccessHandler(function(r) { 
+    isSubmitting = false; 
+    if (r.success) { showToast('Entry saved!', 'success'); closeEntryModal(); loadEntries(); } 
+    else { er.textContent = r.message; er.style.display = 'block'; } 
+  }).addEntry(SESSION_ID, {authorName:an, phones:ph.join(', '), email:em, book:bk, isbn:is, address:ad}); 
+}
+
+// ========== TABLE ==========
+var allEntries = []; 
+var columnFilters = {};
+
+function loadEntries() { 
+  if (!SESSION_ID) return; 
+  document.getElementById('entriesTableBody').innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">Loading...</td></tr>'; 
+  google.script.run.withSuccessHandler(function(r) { 
+    if (r && r.success) { allEntries = r.entries; buildFilterOptions(); filterTable(); updateSummaryCards(r.summary); } 
+  }).getEntries(SESSION_ID); 
+}
+
+function renderTable(entries) { 
+  var tb = document.getElementById('entriesTableBody'); 
+  document.getElementById('entryCount').textContent = entries.length + ' Entr' + (entries.length !== 1 ? 'ies' : 'y'); 
+  if (!entries.length) { tb.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">No entries found.</td></tr>'; return; } 
+  var h = ''; 
+  entries.forEach(function(e) { 
+    var sc, sb;
+    if (!e.status || e.status === '') { sc = '#999'; sb = '#f5f5f5'; }
+    else if (e.status === 'Sold') { sc = '#2e7d32'; sb = '#e8f5e9'; }
+    else if (e.status === 'DNC') { sc = '#c62828'; sb = '#ffebee'; }
+    else if (e.status === 'VM') { sc = '#c2185b'; sb = '#fce4ec'; }
+    else { sc = '#e67e22'; sb = '#fff3e0'; }
+    h += '<tr onclick="selectEntry('+e.id+')" style="cursor:pointer;border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<td style="padding:9px 12px;font-weight:500;text-align:center;">'+escapeHtml(e.authorName)+'</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">'+escapeHtml(e.book)+'</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">'+escapeHtml(e.isbn)+'</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">'+(escapeHtml(e.assignedAgentName)||'<span style="color:#999;">Unassigned</span>')+'</td>' +
+      '<td style="padding:9px 12px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;color:'+sc+';background:'+sb+';">'+(e.status||'None')+'</span></td></tr>'; 
+  }); 
+  tb.innerHTML = h; 
+}
+
+function getFilteredEntries() { 
+  var f = allEntries.slice(); 
+  var st = document.getElementById('searchInput').value.trim().toLowerCase(); 
+  if (st) f = f.filter(function(e) { return (e.authorName&&e.authorName.toLowerCase().indexOf(st)>-1)||(e.book&&e.book.toLowerCase().indexOf(st)>-1)||(e.isbn&&e.isbn.toLowerCase().indexOf(st)>-1)||(e.assignedAgentName&&e.assignedAgentName.toLowerCase().indexOf(st)>-1)||(e.status&&e.status.toLowerCase().indexOf(st)>-1); }); 
+  for (var field in columnFilters) { if (columnFilters[field] && columnFilters[field].length > 0) f = f.filter(function(e) { var v = ''; switch(field) { case 'author': v=e.authorName; break; case 'book': v=e.book; break; case 'agent': v=e.assignedAgentName; break; case 'status': v=e.status; break; } return columnFilters[field].indexOf(v) > -1; }); } 
+  if (activeStatusFilter) f = f.filter(function(e) { return e.status === activeStatusFilter; }); 
+  return f; 
+}
+
+function filterTable() { renderTable(getFilteredEntries()); }
+
+function buildFilterOptions() { 
+  ['author','book','status'].forEach(function(field) { 
+    var lc = document.querySelector('#filterDropdown-'+field+' .filter-options-list'); 
+    if (!lc) return; 
+    var vals = {}; 
+    allEntries.forEach(function(e) { var v = ''; switch(field){case'author':v=e.authorName;break;case'book':v=e.book;break;case'status':v=e.status;break;} if(v)vals[v]=(vals[v]||0)+1; }); 
+    var sv = Object.keys(vals).sort(); 
+    var h = ''; 
+    sv.forEach(function(val) { var is = columnFilters[field] && columnFilters[field].indexOf(val) > -1; h += '<div onclick="return toggleColumnFilter(\''+field+'\', \''+escapeHtml(val).replace(/'/g,"\\'")+'\', event)" style="padding:8px 14px;cursor:pointer;font-size:12px;display:flex;align-items:center;gap:8px;" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'"><input type="checkbox" '+(is?'checked':'')+' style="pointer-events:none;"><span>'+escapeHtml(val)+'</span><span style="color:#aaa;font-size:11px;">'+vals[val]+'</span></div>'; }); 
+    lc.innerHTML = h; 
+  }); 
+}
+
+function toggleFilterDropdown(event, field) { 
+  event.preventDefault(); event.stopPropagation(); 
+  var dd = document.getElementById('filterDropdown-'+field); 
+  document.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';}); 
+  dd.style.display = dd.style.display === 'block' ? 'none' : 'block'; 
+  if (dd.style.display === 'block') buildFilterOptions(); 
+  return false; 
+}
+
+function filterDropdownOptions(input, field) { 
+  var st = input.value.toLowerCase(); 
+  document.querySelectorAll('#filterDropdown-'+field+' .filter-options-list div').forEach(function(o) { o.style.display = o.textContent.toLowerCase().indexOf(st) > -1 ? 'flex' : 'none'; }); 
+}
+
+function toggleColumnFilter(field, value, event) { 
+  if (event) { event.preventDefault(); event.stopPropagation(); } 
+  if (!columnFilters[field]) columnFilters[field] = []; 
+  var i = columnFilters[field].indexOf(value); 
+  if (i > -1) columnFilters[field].splice(i, 1); 
+  else columnFilters[field].push(value); 
+  filterTable(); 
+  return false; 
+}
+
+document.addEventListener('click', function(event) { 
+  if (!event.target.closest('.dropdown-content') && !event.target.closest('.filter-btn')) { 
+    document.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';}); 
+  } 
+});
+
+function updateSummaryCards(s) { 
+  document.getElementById('totalCount').textContent = s.totalAssigned || 0; 
+  document.getElementById('pipeCount').textContent = s.pipeCount || 0; 
+  document.getElementById('soldCount').textContent = s.soldCount || 0; 
+}
+
+function filterByStatus(status) { 
+  activeStatusFilter = activeStatusFilter === status ? null : status; 
+  filterTable(); 
+}
+
+// ========== DETAIL PANEL ==========
+var selectedEntryId = null; 
+var selectedEntryData = null; 
+var isEditMode = false;
+
+function selectEntry(entryId) {
+  var numEntryId = Number(entryId);
+  selectedEntryData = null; 
+  for (var i = 0; i < allEntries.length; i++) { if (allEntries[i].id == numEntryId) { selectedEntryData = allEntries[i]; break; } }
+  if (!selectedEntryData) return; 
+  selectedEntryId = numEntryId; 
+  isEditMode = false;
+  document.getElementById('detailEmpty').style.display = 'none'; 
+  document.getElementById('detailContent').style.display = 'flex'; 
+  setViewMode();
+  document.getElementById('detailAuthorNameView').textContent = selectedEntryData.authorName || '-'; 
+  document.getElementById('detailPhonesView').textContent = selectedEntryData.phones || '-'; 
+  document.getElementById('detailEmailView').textContent = selectedEntryData.email || '-'; 
+  document.getElementById('detailBookView').textContent = selectedEntryData.book || '-'; 
+  document.getElementById('detailISBNView').textContent = selectedEntryData.isbn || '-'; 
+  document.getElementById('detailAddressView').textContent = selectedEntryData.address || '-';
+  document.getElementById('detailAuthorNameEdit').value = selectedEntryData.authorName || ''; 
+  document.getElementById('detailPhonesEdit').value = selectedEntryData.phones || ''; 
+  document.getElementById('detailEmailEdit').value = selectedEntryData.email || ''; 
+  document.getElementById('detailBookEdit').value = selectedEntryData.book || ''; 
+  document.getElementById('detailISBNEdit').value = selectedEntryData.isbn || ''; 
+  document.getElementById('detailAddressEdit').value = selectedEntryData.address || '';
+  document.getElementById('detailStatusSelect').value = selectedEntryData.status || ''; 
+  updateStatusBadge(selectedEntryData.status);
+  showingAllActivity = false; 
+  document.getElementById('toggleActivityBtn').textContent = 'Show All Activity'; 
+  loadRemarksOnly();
+  document.getElementById('remarkInput').value = '';
+}
+
+function setViewMode() { 
+  document.getElementById('editBtn').style.display = 'inline-block'; 
+  document.getElementById('saveEditBtn').style.display = 'none'; 
+  document.getElementById('cancelEditBtn').style.display = 'none'; 
+  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){document.getElementById(id).style.display='block';}); 
+  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){document.getElementById(id).style.display='none';}); 
+  isEditMode = false; 
+}
+
+function toggleEditMode() { 
+  document.getElementById('editBtn').style.display = 'none'; 
+  document.getElementById('saveEditBtn').style.display = 'inline-block'; 
+  document.getElementById('cancelEditBtn').style.display = 'inline-block'; 
+  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){document.getElementById(id).style.display='none';}); 
+  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){document.getElementById(id).style.display='block';}); 
+  isEditMode = true; 
+}
+
+function cancelEdit() { setViewMode(); }
+
+function saveEntryEdits() { 
+  if (!selectedEntryId) return; 
+  google.script.run.withSuccessHandler(function(r) { 
+    if (r.success) { showToast('Updated!', 'success'); setViewMode(); selectEntry(selectedEntryId); loadEntries(); } 
+    else { showToast(r.message, 'error'); } 
+  }).updateEntry(SESSION_ID, selectedEntryId, {
+    authorName: document.getElementById('detailAuthorNameEdit').value.trim(),
+    phones: document.getElementById('detailPhonesEdit').value.trim(),
+    email: document.getElementById('detailEmailEdit').value.trim(),
+    book: document.getElementById('detailBookEdit').value.trim(),
+    isbn: document.getElementById('detailISBNEdit').value.trim(),
+    address: document.getElementById('detailAddressEdit').value.trim()
+  }); 
+}
+
+function deleteCurrentEntry() { 
+  showConfirm('Delete', 'Delete this entry?', function() { 
+    google.script.run.withSuccessHandler(function(r) { 
+      if (r.success) { showToast('Deleted.', 'success'); loadEntries(); document.getElementById('detailEmpty').style.display = 'block'; document.getElementById('detailContent').style.display = 'none'; } 
+      else { showToast(r.message, 'error'); } 
+    }).deleteEntry(SESSION_ID, selectedEntryId); 
+  }, '#d32f2f'); 
+}
+
+function changeEntryStatus() { 
+  google.script.run.withSuccessHandler(function(r) { 
+    if (r.success) { updateStatusBadge(document.getElementById('detailStatusSelect').value); showToast('Updated!', 'success'); loadEntries(); } 
+  }).updateEntryStatus(SESSION_ID, selectedEntryId, document.getElementById('detailStatusSelect').value); 
+}
+
+function updateStatusBadge(status) { 
+  var b = document.getElementById('detailStatus'); 
+  if (!status || status === '') { b.style.background = '#f5f5f5'; b.style.color = '#999'; b.textContent = 'None'; } 
+  else if (status === 'Sold') { b.style.background = '#e8f5e9'; b.style.color = '#2e7d32'; } 
+  else if (status === 'DNC') { b.style.background = '#ffebee'; b.style.color = '#c62828'; } 
+  else if (status === 'VM') { b.style.background = '#fce4ec'; b.style.color = '#c2185b'; } 
+  else { b.style.background = '#fff3e0'; b.style.color = '#e67e22'; } 
+  b.textContent = status || 'None'; 
+}
+
+// ========== REMARKS & ACTIVITY ==========
+function toggleActivityView() { 
+  if (showingAllActivity) { showingAllActivity = false; document.getElementById('toggleActivityBtn').textContent = 'Show All Activity'; loadRemarksOnly(); } 
+  else { showingAllActivity = true; document.getElementById('toggleActivityBtn').textContent = 'Show Remarks Only'; loadEntryActivity(); } 
+}
+
+function loadRemarksOnly() { 
+  if (!selectedEntryId) return; 
+  google.script.run.withSuccessHandler(function(remarks) { 
+    var c = document.getElementById('remarksList'); 
+    if (!remarks || remarks.length === 0) { c.innerHTML = '<div style="color:#b8a88a;font-size:12px;text-align:center;padding:20px;">No remarks yet.</div>'; return; } 
+    var h = ''; 
+    remarks.forEach(function(r) { 
+      var t = new Date(r.timestamp); 
+      h += '<div style="background:white;border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid #e8dcc8;"><div style="display:flex;justify-content:space-between;"><span style="font-size:11px;font-weight:600;color:#5d4e37;">'+escapeHtml(r.userName)+'</span><span style="font-size:9px;color:#b8a88a;">'+t.toLocaleString()+'</span></div><div style="font-size:12px;color:#3d3223;">'+escapeHtml(r.remark)+'</div></div>'; 
+    }); 
+    c.innerHTML = h; 
+  }).getRemarks(selectedEntryId); 
+}
+
+function loadEntryActivity() { 
+  if (!selectedEntryId) return; 
+  google.script.run.withSuccessHandler(function(items) { 
+    var c = document.getElementById('remarksList'); 
+    if (!items || items.length === 0) { c.innerHTML = '<div style="color:#b8a88a;font-size:12px;text-align:center;padding:20px;">No activity yet.</div>'; return; } 
+    var h = ''; 
+    items.forEach(function(item) { 
+      var t = new Date(item.timestamp); 
+      var bg = item.type === 'activity' ? '#f0f4f8' : 'white'; 
+      h += '<div style="background:'+bg+';border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid '+(item.type==='activity'?'#c8d6e5':'#e8dcc8')+';"><div style="display:flex;justify-content:space-between;"><span style="font-size:11px;font-weight:600;color:#5d4e37;">'+escapeHtml(item.userName)+'</span><span style="font-size:9px;color:#b8a88a;">'+t.toLocaleString()+'</span></div><div style="font-size:12px;color:#3d3223;">'+item.content+'</div></div>'; 
+    }); 
+    c.innerHTML = h; 
+  }).getEntryActivity(selectedEntryId); 
+}
+
+function addRemark() { 
+  var txt = document.getElementById('remarkInput').value.trim(); 
+  if (!txt) return; 
+  google.script.run.withSuccessHandler(function(r) { 
+    if (r.success) { document.getElementById('remarkInput').value = ''; if (showingAllActivity) loadEntryActivity(); else loadRemarksOnly(); } 
+  }).addRemark(SESSION_ID, selectedEntryId, txt); 
+}
+
+function escapeHtml(t) { if (!t) return ''; var d = document.createElement('div'); d.textContent = t; return d.innerHTML; }
+
+// ========== EVENT LISTENERS ==========
+document.addEventListener('keydown', function(e) { 
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('remarkInput')) { e.preventDefault(); addRemark(); } 
+  if (e.key === 'Escape') { closeEntryModal(); closeConfirm(false); } 
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.getElementById('confirmBtn').addEventListener('click', function() { closeConfirm(true); });
+  document.getElementById('confirmOverlay').addEventListener('click', function(e) { if (e.target === document.getElementById('confirmOverlay')) closeConfirm(false); });
+  document.getElementById('addEntryModal').addEventListener('click', function(e) { if (e.target === document.getElementById('addEntryModal')) closeEntryModal(); });
+  ['entryAuthorName','entryBook','entryISBN'].forEach(function(id) { 
+    var el = document.getElementById(id); if (el) el.addEventListener('input', updateEntrySubmitButton); 
+  });
+});
+</script>
