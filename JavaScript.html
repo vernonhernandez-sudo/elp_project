@@ -30,6 +30,21 @@ function showMain() {
   loadEntries();
 }
 
+function validateEmail() {
+    const email = document.getElementById("username").value;
+    const message = document.getElementById("message");
+
+    if (!email.includes("@")) {
+        message.textContent = "Invalid email: @ is required";
+        message.style.color = "red";
+    } else {
+        message.textContent = "Valid email";
+        message.style.color = "green";
+    }
+}
+
+document.getElementById("email").addEventListener("input", validateEmail);
+
 function updateClock() { 
   var d = new Date(), el = document.getElementById('currentDate'); 
   if (el) el.textContent = d.toLocaleString('en-US', {timeZone: currentTimeZone, weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}); 
