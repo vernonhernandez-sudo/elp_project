@@ -31,10 +31,10 @@ function showMain() {
 }
 
 function validateEmail() {
-    const user = document.getElementById("username").value;
+    const username = document.getElementById("username").value;
     const message = document.getElementById("message");
 
-    if (!email.includes("@")) {
+    if (!username.includes("@")) {
         message.textContent = "Invalid email: @ is required";
         message.style.color = "red";
     } else {
