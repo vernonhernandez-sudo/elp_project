@@ -357,9 +357,11 @@ function deleteCurrentEntry() {
   }, '#d32f2f'); 
 }
 
+ 
+
 function changeEntryStatus() { 
   google.script.run.withSuccessHandler(function(r) { 
-    if (r.success) { updateStatusBadge(document.getElementById('detailStatusSelect').value); showToast('Updated!', 'success'); loadEntries(); } 
+    if (r.success) { var statusSelect = document.getElementById('detailStatusSelect'); updateStatusBadge(statusSelect.value); statusSelect.disabled = true; showToast('Updated!', 'success'); loadEntries(); }
   }).updateEntryStatus(SESSION_ID, selectedEntryId, document.getElementById('detailStatusSelect').value); 
 }
 
