@@ -427,7 +427,7 @@ document.addEventListener('keydown', function(e) {
 document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('confirmBtn').addEventListener('click', function() { closeConfirm(true); });
   document.getElementById('confirmOverlay').addEventListener('click', function(e) { if (e.target === document.getElementById('confirmOverlay')) closeConfirm(false); });
-  document.getElementById('addEntryModal').addEventListener('click', function(e) { if (e.target === document.getElementById('addEntryModal')) closeEntryModal(); });
+  //document.getElementById('addEntryModal').addEventListener('click', function(e) { if (e.target === document.getElementById('addEntryModal')) closeEntryModal(); });
   ['entryAuthorName','entryBook','entryISBN'].forEach(function(id) { 
     var el = document.getElementById(id); if (el) el.addEventListener('input', updateEntrySubmitButton); 
   });
