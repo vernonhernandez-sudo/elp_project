@@ -111,44 +111,106 @@ function deleteEntry(sessionId, entryId) {
 }
 
 // Everyone sees all entries (master list)
+// function getEntries(sessionId) {
+//   try {
+//     var u=getUserFromCache(sessionId);
+//     if(!u)return{success:false,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};
+//     var ss=SpreadsheetApp.openById(SHEET_ID);
+//     var ed=ss.getSheetByName('Entries').getDataRange().getValues();
+//     if(ed.length<=1)return{success:true,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};
+//     ed.shift();
+//     var ad=ss.getSheetByName('Agents').getDataRange().getValues();ad.shift();
+//     var am={};
+//     for(var k=0;k<ad.length;k++){am[ad[k][0]]=ad[k][3];}
+//     var entries=[];
+//     for(var i=0;i<ed.length;i++){
+//       entries.push({
+//         id:ed[i][0],
+//         authorName:ed[i][1]||'',
+//         phones:ed[i][2]||'',
+//         email:ed[i][3]||'',
+//         book:ed[i][4]||'',
+//         isbn:ed[i][5]||'',
+//         address:ed[i][6]||'',
+//         assignedAgentId:ed[i][7],
+//         assignedAgentName:am[ed[i][7]]||'Unassigned',
+//         status:ed[i][8]||'',
+//         createdAt:ed[i][9]||''
+//       });
+//     }
+//     return{
+//       success:true,
+//       entries:entries,
+//       summary:{
+//         pipeCount:entries.filter(function(e){return e.status==='Pipe';}).length,
+//         soldCount:entries.filter(function(e){return e.status==='Sold';}).length,
+//         totalAssigned:entries.length
+//       }
+//     };
+//   } catch(e){return{success:false,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};}
+// }
+
 function getEntries(sessionId) {
-  try {
-    var u=getUserFromCache(sessionId);
-    if(!u)return{success:false,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};
-    var ss=SpreadsheetApp.openById(SHEET_ID);
-    var ed=ss.getSheetByName('Entries').getDataRange().getValues();
-    if(ed.length<=1)return{success:true,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};
+  try { var u = getUserFromCache(sessionId); if (!u) { return { success: false, entries: [], summary: { pipeCount: 0, soldCount: 0, totalAssigned: 0 } }; }
+
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var entriesSheet = ss.getSheetByName('Entries');
+    var ed = entriesSheet.getDataRange().getValues();
+
+    if (ed.length <= 1) { return { success: true, entries: [], summary: { pipeCount: 0, soldCount: 0, totalAssigned: 0 } }; }
     ed.shift();
-    var ad=ss.getSheetByName('Agents').getDataRange().getValues();ad.shift();
-    var am={};
-    for(var k=0;k<ad.length;k++){am[ad[k][0]]=ad[k][3];}
-    var entries=[];
-    for(var i=0;i<ed.length;i++){
+
+    var agentsSheet = ss.getSheetByName('Agents');
+    var ad = agentsSheet.getDataRange().getValues();
+
+    if (ad.length > 0) { ad.shift(); }
+
+    var am = {};
+
+    for (var k = 0; k < ad.length; k++) {
+
+    var agentId = ad[k][0];
+    var agentName = ad[k][3];
+
+    if (agentId !== '' && agentId != null) { am[String(agentId)] = agentName || ''; } }
+
+    var loggedInUserId = u.id;
+
+    if (loggedInUserId === undefined || loggedInUserId === null || loggedInUserId === '') { return { success: false, entries: [], summary: { pipeCount: 0, soldCount: 0, totalAssigned: 0 } }; }
+    loggedInUserId = String(loggedInUserId);
+
+    var entries = [];
+
+    for (var i = 0; i < ed.length; i++) {
+
+      var assignedAgentId = ed[i][7];
+
+      if ( assignedAgentId === '' || assignedAgentId === null || assignedAgentId === undefined ) { continue; } 
+
+      var assignedAgentName =
+        am[String(assignedAgentId)] || 'Unassigned';
+
       entries.push({
-        id:ed[i][0],
-        authorName:ed[i][1]||'',
-        phones:ed[i][2]||'',
-        email:ed[i][3]||'',
-        book:ed[i][4]||'',
-        isbn:ed[i][5]||'',
-        address:ed[i][6]||'',
-        assignedAgentId:ed[i][7],
-        assignedAgentName:am[ed[i][7]]||'Unassigned',
-        status:ed[i][8]||'',
-        createdAt:ed[i][9]||''
+        id: ed[i][0],
+        authorName: ed[i][1] || '',
+        phones: ed[i][2] || '',
+        email: ed[i][3] || '',
+        book: ed[i][4] || '',
+        isbn: ed[i][5] || '',
+        address: ed[i][6] || '',
+        assignedAgentId: assignedAgentId,
+        assignedAgentName: assignedAgentName,
+        status: ed[i][8] || '',
+        createdAt: ed[i][9] || ''
       });
     }
-    return{
-      success:true,
-      entries:entries,
-      summary:{
-        pipeCount:entries.filter(function(e){return e.status==='Pipe';}).length,
-        soldCount:entries.filter(function(e){return e.status==='Sold';}).length,
-        totalAssigned:entries.length
-      }
-    };
-  } catch(e){return{success:false,entries:[],summary:{pipeCount:0,soldCount:0,totalAssigned:0}};}
-}
+
+    var pipeCount = 0;
+    var soldCount = 0;
+for (var j = 0; j < entries.length; j++) { if (entries[j].status === 'Pipe') { pipeCount++; } if (entries[j].status === 'Sold') { soldCount++; } }
+
+    return { success: true, entries: entries, summary: { pipeCount: pipeCount, soldCount: soldCount, totalAssigned: entries.length } };
+  } catch (e) { Logger.log('getEntries error: ' + e); return { success: false, entries: [], summary: { pipeCount: 0, soldCount: 0, totalAssigned: 0 }, error: e.toString() }; } }
 
 // ========== STATUS MANAGEMENT ==========
 function updateEntryStatus(sessionId, entryId, newStatus) {
