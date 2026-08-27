@@ -6,18 +6,57 @@ var confirmCallback = null;
 var isSubmitting = false;
 var currentTimeZone = 'America/Los_Angeles';
 var activeStatusFilter = null;
+var activeDashboardId = 'mainScreen';
+
+function normalizeRole(role) {
+  return (role || '').toString().trim().toLowerCase().replace(/[\s_-]+/g, '');
+}
+
+function dashboardElement(id) {
+  var dashboard = document.getElementById(activeDashboardId);
+  return dashboard ? dashboard.querySelector('#' + id) : document.getElementById(id);
+}
 
 (function() {
   var stored = sessionStorage.getItem('crm_session');
-  if (stored) { 
-    SESSION_ID = stored; 
-    google.script.run.withSuccessHandler(function(u) { 
-      if (u && u.name) { currentUser = u; showMain(); populateUser(); } 
-    }).getUserFromCache(SESSION_ID); 
+
+  if (stored) {
+    SESSION_ID = stored;
+
+    google.script.run.withSuccessHandler(function(u) {
+
+      if (u && u.name) {
+
+        var role = normalizeRole(u.role);
+
+        activeDashboardId = role === 'superadmin' ? 'superScreen' : role === 'admin' ? 'adminScreen' : 'mainScreen';
+        currentUser = u;
+        populateUser();
+
+        console.log('Cached User:', u);
+        console.log('Cached Role:', u.role);
+        console.log('Normalized Cached Role:', role);
+
+        if (role === 'superadmin') {
+
+          showSuperAdmin();
+
+        } else if (role === 'admin') {
+
+          showAdmin();
+
+        } else {
+
+          showMain();
+        }
+      }
+
+    }).getUserFromCache(SESSION_ID);
   }
 })();
 
 function showMain() {
+  activeDashboardId = 'mainScreen';
   document.getElementById('loginScreen').style.display = 'none';
   var m = document.getElementById('mainScreen'); 
   m.style.display = 'flex'; 
@@ -27,26 +66,94 @@ function showMain() {
   m.style.background = 'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
   updateClock(); 
   setInterval(updateClock, 1000); 
-  loadEntries();
+  loadEntries('main');
+}
+
+// function showSuperAdmin() {
+//   document.getElementById('loginScreen').style.display = 'none';
+//   var m = document.getElementById('superScreen'); 
+//   m.style.display = 'flex'; 
+//   m.style.flexDirection = 'column'; 
+//   m.style.height = '100vh'; 
+//   m.style.width = '100vw'; 
+//   m.style.background = 'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
+//   updateClock(); 
+//   setInterval(updateClock, 1000); 
+//   loadEntries('superadmin');
+// }
+
+function showSuperAdmin() {
+  activeDashboardId = 'superScreen';
+  var loginScreen = document.getElementById('loginScreen');
+  var mainScreen = document.getElementById('mainScreen');
+  var adminScreen = document.getElementById('adminScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (mainScreen) mainScreen.style.display = 'none';
+  if (adminScreen) adminScreen.style.display = 'none';
+
+  var m = document.getElementById('superScreen');
+  if (!m) return;
+
+  m.style.display = 'flex';
+  m.style.flexDirection = 'column';
+  m.style.height = '100vh';
+  m.style.width = '100vw';
+
+  m.style.background =
+    'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
+
+  updateClock();
+  setInterval(updateClock, 1000);
+
+  openCity(null, 'Leads');
+  loadEntries('superadmin');
+}
+
+function showAdmin() {
+  activeDashboardId = 'adminScreen';
+  var loginScreen = document.getElementById('loginScreen');
+  var mainScreen = document.getElementById('mainScreen');
+  var superScreen = document.getElementById('superScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (mainScreen) mainScreen.style.display = 'none';
+  if (superScreen) superScreen.style.display = 'none';
+  var m = document.getElementById('adminScreen'); 
+  if (!m) return;
+  m.style.display = 'flex'; 
+  m.style.flexDirection = 'column'; 
+  m.style.height = '100vh'; 
+  m.style.width = '100vw'; 
+  m.style.background = 'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
+  updateClock(); 
+  setInterval(updateClock, 1000); 
+  openCity(null, 'Leads');
+  loadEntries('admin');
 }
 
 function validateEmail() {
-    const username = document.getElementById("username").value;
-    const message = document.getElementById("message");
 
-    if (!username.includes("@")) {
-        message.textContent = "Invalid email: @ is required";
-        message.style.color = "red";
-    } else {
-        message.textContent = "Valid email";
-        message.style.color = "green";
-    }
+  var usernameInput = document.getElementById('username');
+  var message = document.getElementById('message');
+
+  if (!usernameInput || !message) {
+    return;
+  }
+
+  var username = usernameInput.value.trim();
+  if (!username.includes('@')) {
+    message.textContent = 'Invalid email: @ is required';
+    message.style.color = 'red';
+  } else { message.textContent = 'Valid email'; message.style.color = 'green'; }
 }
 
-document.getElementById("email").addEventListener("input", validateEmail);
+var usernameInput = document.getElementById('username');
+if (usernameInput) {
+  usernameInput.addEventListener('input', validateEmail);
+}
+
 
 function updateClock() { 
-  var d = new Date(), el = document.getElementById('currentDate'); 
+  var d = new Date(), el = dashboardElement('currentDate');
   if (el) el.textContent = d.toLocaleString('en-US', {timeZone: currentTimeZone, weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}); 
 }
 
@@ -54,44 +161,119 @@ function populateUser() {
   if (!currentUser) return;
   var p = currentUser.name.split(' ').filter(Boolean), 
       ini = p.length > 1 ? (p[0][0]+p[p.length-1][0]).toUpperCase() : (p[0]||'').substring(0,2).toUpperCase();
-  document.getElementById('avatar').textContent = ini; 
-  document.getElementById('userName').textContent = currentUser.name; 
-  document.getElementById('userEmail').textContent = currentUser.email || '';
+  var avatar = dashboardElement('avatar');
+  var userName = dashboardElement('userName');
+  var userEmail = dashboardElement('userEmail');
+  var userRole = dashboardElement('userRole');
+  if (avatar) avatar.textContent = ini;
+  if (userName) userName.textContent = currentUser.name;
+  if (userEmail) userEmail.textContent = currentUser.email || '';
+  if (userRole) userRole.textContent = currentUser.role || '';
 }
+
 
 function handleLogin(e) {
-  e.preventDefault(); 
-  var u = document.getElementById('username').value.trim(), 
-      p = document.getElementById('password').value, 
-      b = document.getElementById('loginButton'), 
-      er = document.getElementById('loginError');
-  er.style.display = 'none'; 
-  if (!u || !p) { er.textContent = 'Please enter username and password.'; er.style.display = 'block'; return; }
-  b.disabled = true; b.textContent = 'Signing in...';
-  google.script.run.withSuccessHandler(function(r) { 
-    b.disabled = false; b.textContent = 'Sign In';
-    if (r.success) { 
-      SESSION_ID = r.sessionId; 
-      currentUser = r.user; 
-      sessionStorage.setItem('crm_session', SESSION_ID); 
-      populateUser(); 
-      showMain(); 
-    } else { 
-      er.textContent = r.message; er.style.display = 'block'; 
-    } 
-  }).loginUser(u, p);
+
+  e.preventDefault();
+
+  var usernameEl =
+    document.getElementById('username');
+
+  var passwordEl =
+    document.getElementById('password');
+
+  var loginButton =
+    document.getElementById('loginButton');
+
+  var loginError =
+    document.getElementById('loginError');
+
+  if (!usernameEl || !passwordEl) { console.error('Login fields not found.'); return; }
+  var u =
+    usernameEl.value.trim();
+
+  var p =
+    passwordEl.value;
+
+  if (loginError) { loginError.style.display = 'none'; }
+  if (!u || !p) { if (loginError) { loginError.textContent = 'Please enter username and password.'; loginError.style.display = 'block'; } return; }
+  if (loginButton) { loginButton.disabled = true; loginButton.textContent = 'Signing in...'; }
+
+  google.script.run
+
+    .withSuccessHandler(function(r) {
+      if (loginButton) { loginButton.disabled = false; loginButton.textContent = 'Sign In'; }
+      console.log('Login response:', r);
+
+      if (!r || !r.success) { if (loginError) { loginError.textContent = r && r.message ? r.message : 'Login failed.'; loginError.style.display = 'block'; } return; }
+      SESSION_ID =
+        r.sessionId;
+
+      sessionStorage.setItem(
+        'crm_session',
+        SESSION_ID
+      );
+
+      var role = normalizeRole(r.user && r.user.role ? r.user.role : '');
+
+      currentUser = r.user;
+      activeDashboardId = role === 'superadmin' ? 'superScreen' : role === 'admin' ? 'adminScreen' : 'mainScreen';
+
+      console.log('Logged-in User:', currentUser);
+
+      populateUser();
+
+      console.log('User Role:', r.user.role);
+      console.log('Normalized Role:', role);
+      if (role === 'superadmin') { showSuperAdmin(); } else if (role === 'admin') { showAdmin(); } else { showMain(); } })
+
+    .withFailureHandler(function(error) {
+
+      console.error( 'loginUser() failed:', error );
+      if (loginButton) { loginButton.disabled = false; loginButton.textContent = 'Sign In'; }
+      if (loginError) { loginError.textContent = 'Unable to connect to server.'; loginError.style.display = 'block'; } }) .loginUser(u, p);
 }
 
-function handleLogout() { 
-  if (SESSION_ID) google.script.run.logoutUser(SESSION_ID); 
-  sessionStorage.removeItem('crm_session'); 
-  SESSION_ID = null; currentUser = null; 
-  document.getElementById('mainScreen').style.display = 'none'; 
-  document.getElementById('loginScreen').style.display = 'block'; 
+function handleLogout() {
+
+  // Logout from server
+  if (SESSION_ID) {
+    google.script.run.logoutUser(SESSION_ID);
+  }
+
+  // Clear browser session
+  sessionStorage.removeItem('crm_session');
+
+  SESSION_ID = null;
+  currentUser = null;
+
+  // Hide all dashboard screens
+  var mainScreen = document.getElementById('mainScreen');
+  var adminScreen = document.getElementById('adminScreen');
+  var superScreen = document.getElementById('superScreen');
+
+  if (mainScreen) {
+    mainScreen.style.display = 'none';
+  }
+
+  if (adminScreen) {
+    adminScreen.style.display = 'none';
+  }
+
+  if (superScreen) {
+    superScreen.style.display = 'none';
+  }
+
+  // Show login screen
+  var loginScreen = document.getElementById('loginScreen');
+
+  if (loginScreen) {
+    loginScreen.style.display = 'block';
+  }
 }
 
 function showToast(message, type) { 
-  var toast = document.getElementById('toast'); 
+  var toast = dashboardElement('toast');
   toast.textContent = message; 
   toast.className = 'toast ' + (type || 'success'); 
   toast.style.display = 'block'; 
@@ -100,15 +282,15 @@ function showToast(message, type) {
 }
 
 function showConfirm(title, message, onConfirm, confirmColor) { 
-  document.getElementById('confirmTitle').textContent = title || 'Confirm'; 
-  document.getElementById('confirmMessage').innerHTML = message || 'Are you sure?'; 
-  document.getElementById('confirmBtn').style.background = confirmColor || '#d32f2f'; 
-  document.getElementById('confirmOverlay').style.display = 'flex'; 
+  dashboardElement('confirmTitle').textContent = title || 'Confirm';
+  dashboardElement('confirmMessage').innerHTML = message || 'Are you sure?';
+  dashboardElement('confirmBtn').style.background = confirmColor || '#d32f2f';
+  dashboardElement('confirmOverlay').style.display = 'flex';
   confirmCallback = onConfirm; 
 }
 
 function closeConfirm(confirmed) { 
-  document.getElementById('confirmOverlay').style.display = 'none'; 
+  dashboardElement('confirmOverlay').style.display = 'none';
   if (confirmed && typeof confirmCallback === 'function') { 
     var cb = confirmCallback; confirmCallback = null; 
     cb(); 
@@ -116,44 +298,121 @@ function closeConfirm(confirmed) {
 }
 
 // ========== ENTRY MODAL ==========
-function openEntryModal() { 
-  document.getElementById('entryAuthorName').value = ''; 
-  document.getElementById('entryEmail').value = ''; 
-  document.getElementById('entryBook').value = ''; 
-  document.getElementById('entryISBN').value = ''; 
-  document.getElementById('entryAddress').value = ''; 
-  document.getElementById('entryError').style.display = 'none'; 
-  document.getElementById('phoneNumbersContainer').innerHTML = '<div style="display:flex;gap:8px;margin-bottom:8px;"><input type="text" class="entryPhone" placeholder="+1 234 567 8900" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;"><button type="button" onclick="removePhoneField(this)" style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;display:none;">Remove</button></div>'; 
+function openEntryModal() {
+  dashboardElement('entryAuthorName').value = '';
+  dashboardElement('entryEmail').value = '';
+  dashboardElement('entryBook').value = '';
+  dashboardElement('entryISBN').value = '';
+  dashboardElement('entryAddress').value = '';
+  dashboardElement('entryError').style.display = 'none';
+  dashboardElement('phoneNumbersContainer').innerHTML = '<div style="display:flex;gap:8px;margin-bottom:8px;"><input type="text" class="entryPhone" placeholder="+1 234 567 8900" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;"><button type="button" onclick="removePhoneField(this)" style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;display:none;">Remove</button></div>';
   updateEntrySubmitButton(); 
-  document.getElementById('addEntryModal').style.display = 'flex'; 
-  document.getElementById('entryAuthorName').focus(); 
+  dashboardElement('addEntryModal').style.display = 'flex';
+  dashboardElement('entryAuthorName').focus();
 }
 
-function closeEntryModal() { document.getElementById('addEntryModal').style.display = 'none'; }
+function closeEntryModal() { dashboardElement('addEntryModal').style.display = 'none'; }
+
+function openUserModal() {
+  ['userUsername', 'userPassword', 'userNameInput', 'userEmailInput'].forEach(function(id) {
+    dashboardElement(id).value = '';
+  });
+  if (dashboardElement('userRoleInput')) dashboardElement('userRoleInput').value = 'Agent';
+  if (dashboardElement('userStatusInput')) dashboardElement('userStatusInput').value = 'Active';
+  if (dashboardElement('userPositionInput')) dashboardElement('userPositionInput').value = 'BM';
+  updateUserPositionState();
+  dashboardElement('userError').style.display = 'none';
+  dashboardElement('addUserModal').style.display = 'flex';
+  dashboardElement('userUsername').focus();
+}
+
+function closeUserModal() {
+  dashboardElement('addUserModal').style.display = 'none';
+}
+
+function updateUserPositionState() {
+  var role = dashboardElement('userRoleInput');
+  var position = dashboardElement('userPositionInput');
+  if (!role || !position) return;
+  var isSuperAdmin = role.value === 'Super Admin';
+  position.disabled = isSuperAdmin;
+  if (isSuperAdmin) position.value = '';
+  else if (!position.value) position.value = 'BM';
+}
+
+function updateUserPositionState() {
+  var role = dashboardElement('userRoleInput');
+  var position = dashboardElement('userPositionInput');
+
+  if (!role || !position) return;
+
+  var isRestrictedRole =
+    role.value === 'Super Admin' ||
+    role.value === 'Lead Gen Specialist';
+
+  position.disabled = isRestrictedRole;
+
+  if (isRestrictedRole) {
+    position.value = '';
+  } else if (!position.value) {
+    position.value = 'BM';
+  }
+}
+
+
+function submitUser(event) {
+  event.preventDefault();
+  var error = dashboardElement('userError');
+  error.style.display = 'none';
+  var userData = {
+    username: dashboardElement('userUsername').value.trim(),
+    password: dashboardElement('userPassword').value,
+    name: dashboardElement('userNameInput').value.trim(),
+    email: dashboardElement('userEmailInput').value.trim(),
+    role: dashboardElement('userRoleInput').value,
+    status: dashboardElement('userStatusInput') ? dashboardElement('userStatusInput').value : 'Active',
+    position: dashboardElement('userPositionInput') && !dashboardElement('userPositionInput').disabled ? dashboardElement('userPositionInput').value : ''
+  };
+  google.script.run
+    .withSuccessHandler(function(response) {
+      if (response && response.success) {
+        closeUserModal();
+        showToast('User added.', 'success');
+      } else {
+        error.textContent = response && response.message ? response.message : 'Unable to add user.';
+        error.style.display = 'block';
+      }
+    })
+    .withFailureHandler(function() {
+      error.textContent = 'Unable to connect to server.';
+      error.style.display = 'block';
+    })
+    .addUser(SESSION_ID, userData);
+}
 
 function addPhoneField() { 
-  var c = document.getElementById('phoneNumbersContainer'), d = document.createElement('div'); 
+  var c = dashboardElement('phoneNumbersContainer'), d = document.createElement('div');
   d.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;'; 
   d.innerHTML = '<input type="text" class="entryPhone" placeholder="+1 234 567 8900" style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;"><button type="button" onclick="removePhoneField(this)" style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;">Remove</button>'; 
   c.appendChild(d); updateRemoveButtons(); 
 }
 
 function removePhoneField(b) { 
-  var c = document.getElementById('phoneNumbersContainer'); 
+  var c = dashboardElement('phoneNumbersContainer');
   if (c.children.length > 1) { b.parentElement.remove(); updateRemoveButtons(); } 
 }
 
 function updateRemoveButtons() { 
-  var rb = document.getElementById('phoneNumbersContainer').querySelectorAll('button'); 
+  var rb = dashboardElement('phoneNumbersContainer').querySelectorAll('button');
   if (rb.length <= 1) rb.forEach(function(b) { b.style.display = 'none'; }); 
   else rb.forEach(function(b) { b.style.display = 'inline-block'; }); 
 }
 
 function updateEntrySubmitButton() { 
-  var an = document.getElementById('entryAuthorName').value.trim(), 
-      bk = document.getElementById('entryBook').value.trim(), 
-      is = document.getElementById('entryISBN').value.trim(); 
-  var b = document.getElementById('entrySubmitBtn'); 
+    var an = dashboardElement('entryAuthorName').value.trim(),
+      bk = dashboardElement('entryBook').value.trim(),
+      is = dashboardElement('entryISBN').value.trim();
+    var b = dashboardElement('entrySubmitBtn');
   b.disabled = !(an && bk && is); 
   b.style.opacity = b.disabled ? '0.5' : '1'; 
 }
@@ -162,14 +421,14 @@ function submitEntry(e) {
   e.preventDefault(); 
   if (isSubmitting) return; 
   isSubmitting = true; 
-  var an = document.getElementById('entryAuthorName').value.trim(), 
-      bk = document.getElementById('entryBook').value.trim(), 
-      is = document.getElementById('entryISBN').value.trim(), 
-      em = document.getElementById('entryEmail').value.trim(), 
-      ad = document.getElementById('entryAddress').value.trim(); 
-  var pi = document.querySelectorAll('.entryPhone'), ph = []; 
+    var an = dashboardElement('entryAuthorName').value.trim(),
+      bk = dashboardElement('entryBook').value.trim(),
+      is = dashboardElement('entryISBN').value.trim(),
+      em = dashboardElement('entryEmail').value.trim(),
+      ad = dashboardElement('entryAddress').value.trim();
+    var dashboard = document.getElementById(activeDashboardId), pi = dashboard.querySelectorAll('.entryPhone'), ph = [];
   pi.forEach(function(i) { var v = i.value.trim(); if (v) ph.push(v); }); 
-  var er = document.getElementById('entryError'); 
+  var er = dashboardElement('entryError');
   er.style.display = 'none'; 
   if (!an || !bk || !is) { er.textContent = 'Author Name, Book, and ISBN are required.'; er.style.display = 'block'; isSubmitting = false; return; } 
   google.script.run.withSuccessHandler(function(r) { 
@@ -180,20 +439,209 @@ function submitEntry(e) {
 }
 
 // ========== TABLE ==========
-var allEntries = []; 
+var allEntries = [];
+var allUsers = [];
+var selectedUserId = null;
+var selectedUserData = null;
+var isUserEditMode = false;
+var transferNotificationRequests = [];
+
+function openCity(event, cityName) {
+  var dashboard = document.getElementById(activeDashboardId);
+  if (!dashboard) return;
+  dashboard.querySelectorAll('.tabcontent').forEach(function(tab) { tab.style.display = 'none'; tab.classList.remove('is-active'); });
+  dashboard.querySelectorAll('.tablinks').forEach(function(button) { button.classList.remove('active'); });
+  var tab = dashboard.querySelector('#' + cityName);
+  if (tab) { tab.style.display = 'flex'; tab.classList.add('is-active'); }
+  if (event && event.currentTarget) event.currentTarget.classList.add('active');
+  else {
+    dashboard.querySelectorAll('.tablinks').forEach(function(button) {
+      if (button.getAttribute('onclick') && button.getAttribute('onclick').indexOf("'" + cityName + "'") > -1) button.classList.add('active');
+    });
+  }
+  var detail = dashboard.querySelector('#detailContent');
+  var userDetail = dashboard.querySelector('#userDetailContent');
+  var empty = dashboard.querySelector('#detailEmpty');
+  if (cityName === 'Users') {
+    if (detail) detail.style.display = 'none';
+    if (userDetail) userDetail.style.display = selectedUserData ? 'flex' : 'none';
+    if (empty) empty.style.display = selectedUserData ? 'none' : 'block';
+    loadUsers();
+  } else {
+    if (userDetail) userDetail.style.display = 'none';
+    if (detail) detail.style.display = selectedEntryData ? 'flex' : 'none';
+    if (empty) empty.style.display = selectedEntryData ? 'none' : 'block';
+  }
+}
+
+function loadUsers() {
+  var tableBody = dashboardElement(activeDashboardId === 'superScreen' ? 'superUsersTableBody' : 'adminUsersTableBody');
+  if (!tableBody || !SESSION_ID) return;
+  tableBody.innerHTML = '<tr><td colspan="6" style="padding:60px;text-align:center;color:#aaa;">Loading users...</td></tr>';
+  google.script.run.withSuccessHandler(function(response) {
+    if (response && response.success) {
+      allUsers = response.users || [];
+      filterTable();
+      if (selectedUserId !== null) selectUser(selectedUserId);
+    } else {
+      tableBody.innerHTML = '<tr><td colspan="6" style="padding:60px;text-align:center;color:#d32f2f;">Unable to load users.</td></tr>';
+    }
+  }).withFailureHandler(function() {
+    tableBody.innerHTML = '<tr><td colspan="6" style="padding:60px;text-align:center;color:#d32f2f;">Unable to connect to server.</td></tr>';
+  }).getUsers(SESSION_ID);
+}
+
+function renderUsers(users) {
+  var tableBody = dashboardElement(activeDashboardId === 'superScreen' ? 'superUsersTableBody' : 'adminUsersTableBody');
+  if (!tableBody) return;
+  var countElement = dashboardElement(activeDashboardId === 'superScreen' ? 'superEntryCount' : 'entryCount');
+  countElement.textContent = users.length + ' User' + (users.length !== 1 ? 's' : '');
+  if (!users.length) {
+    tableBody.innerHTML = '<tr><td colspan="6" style="padding:60px;text-align:center;color:#aaa;">No users found.</td></tr>';
+    return;
+  }
+  var html = '';
+  var userRowAction = '';
+  users.forEach(function(user) {
+    var statusColor = user.status === 'Active' ? '#2e7d32' : '#999';
+    var statusBackground = user.status === 'Active' ? '#e8f5e9' : '#f5f5f5';
+    var dashboard = document.getElementById(activeDashboardId);
+    var canEditUsers = activeDashboardId === 'superScreen' || (dashboard && dashboard.querySelector('#userDetailContent'));
+    userRowAction = canEditUsers ? ' onclick="selectUser(' + JSON.stringify(user.id) + ')"' : '';
+    html += '<tr' + userRowAction + ' style="cursor:' + (canEditUsers ? 'pointer' : 'default') + ';border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">' +
+      '<td style="padding:9px 12px;font-weight:500;text-align:center;">' + escapeHtml(user.name) + '</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">' + escapeHtml(user.email) + '</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">' + escapeHtml(user.position) + '</td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">' + escapeHtml(user.role) + '</td>' +
+      '<td style="padding:9px 12px;text-align:center;"><span style="display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;color:' + statusColor + ';background:' + statusBackground + ';">' + escapeHtml(user.status || 'None') + '</span></td>' +
+      '<td style="padding:9px 12px;color:#555;text-align:center;">' + escapeHtml(user.ip || '-') + '</td></tr>';
+  });
+  tableBody.innerHTML = html;
+}
+
+function selectUser(userId) {
+  selectedUserData = null;
+  for (var i = 0; i < allUsers.length; i++) {
+    if (String(allUsers[i].id) === String(userId)) { selectedUserData = allUsers[i]; break; }
+  }
+  if (!selectedUserData) return;
+  selectedUserId = selectedUserData.id;
+  dashboardElement('detailEmpty').style.display = 'none';
+  dashboardElement('detailContent').style.display = 'none';
+  dashboardElement('userDetailContent').style.display = 'flex';
+  setUserViewMode();
+  ['Username','Name','Email','Position','Role','Status','Ip'].forEach(function(field) {
+    var value = selectedUserData[field.toLowerCase()] || '-';
+    dashboardElement('userDetail' + field + 'View').textContent = value;
+    dashboardElement('userDetail' + field + 'Edit').value = selectedUserData[field.toLowerCase()] || '';
+  });
+  dashboardElement('userDetailPasswordEdit').value = '';
+  updateUserEditPositionState();
+  updateUserStatusBadge(selectedUserData.status);
+}
+
+function setUserViewMode() {
+  ['userDetailUsernameView','userDetailNameView','userDetailEmailView','userDetailPositionView','userDetailRoleView','userDetailStatusView','userDetailIpView'].forEach(function(id) { dashboardElement(id).style.display = 'block'; });
+  ['userDetailUsernameEdit','userDetailNameEdit','userDetailEmailEdit','userDetailPositionEdit','userDetailRoleEdit','userDetailStatusEdit','userDetailIpEdit','userDetailPasswordEdit'].forEach(function(id) { dashboardElement(id).style.display = 'none'; });
+  dashboardElement('userEditBtn').style.display = 'inline-block';
+  dashboardElement('userSaveEditBtn').style.display = 'none';
+  dashboardElement('userCancelEditBtn').style.display = 'none';
+  dashboardElement('userDetailPositionEdit').disabled = false;
+  isUserEditMode = false;
+}
+
+function updateUserEditPositionState() {
+  var role = dashboardElement('userDetailRoleEdit');
+  var position = dashboardElement('userDetailPositionEdit');
+  if (!role || !position) return;
+  var isSuperAdmin = role.value === 'Super Admin';
+  position.disabled = isSuperAdmin;
+  if (isSuperAdmin) position.value = '';
+}
+
+function toggleUserEditMode() {
+  ['userDetailUsernameView','userDetailNameView','userDetailEmailView','userDetailPositionView','userDetailRoleView','userDetailStatusView','userDetailIpView'].forEach(function(id) { dashboardElement(id).style.display = 'none'; });
+  ['userDetailUsernameEdit','userDetailNameEdit','userDetailEmailEdit','userDetailPositionEdit','userDetailRoleEdit','userDetailStatusEdit','userDetailIpEdit','userDetailPasswordEdit'].forEach(function(id) { dashboardElement(id).style.display = 'block'; });
+  dashboardElement('userEditBtn').style.display = 'none';
+  dashboardElement('userSaveEditBtn').style.display = 'inline-block';
+  dashboardElement('userCancelEditBtn').style.display = 'inline-block';
+  updateUserEditPositionState();
+  isUserEditMode = true;
+}
+
+function cancelUserEdit() { selectUser(selectedUserId); }
+
+function saveUserEdits() {
+  if (!selectedUserId) return;
+  google.script.run.withSuccessHandler(function(response) {
+    if (response && response.success) {
+      showToast('User updated.', 'success');
+      loadUsers();
+      setUserViewMode();
+    } else showToast(response && response.message ? response.message : 'Unable to update user.', 'error');
+  }).withFailureHandler(function() { showToast('Unable to connect to server.', 'error'); }).updateUser(SESSION_ID, selectedUserId, {
+    username: dashboardElement('userDetailUsernameEdit').value.trim(),
+    name: dashboardElement('userDetailNameEdit').value.trim(),
+    email: dashboardElement('userDetailEmailEdit').value.trim(),
+    position: dashboardElement('userDetailPositionEdit').value,
+    role: dashboardElement('userDetailRoleEdit').value,
+    status: dashboardElement('userDetailStatusEdit').value,
+    ip: dashboardElement('userDetailIpEdit').value.trim(),
+    password: dashboardElement('userDetailPasswordEdit').value
+  });
+}
+
+function deleteCurrentUser() {
+  if (!selectedUserId || !selectedUserData) return;
+  showConfirm('Delete User', 'Delete ' + escapeHtml(selectedUserData.name || selectedUserData.username) + '?', function() {
+    google.script.run.withSuccessHandler(function(response) {
+      if (response && response.success) {
+        selectedUserId = null;
+        selectedUserData = null;
+        dashboardElement('userDetailContent').style.display = 'none';
+        dashboardElement('detailEmpty').style.display = 'block';
+        loadUsers();
+        showToast('User deleted.', 'success');
+      } else showToast(response && response.message ? response.message : 'Unable to delete user.', 'error');
+    }).withFailureHandler(function() { showToast('Unable to connect to server.', 'error'); }).deleteUser(SESSION_ID, selectedUserId);
+  });
+}
+
+function updateUserStatusBadge(status) {
+  var badge = dashboardElement('userDetailStatus');
+  badge.textContent = status || 'None';
+  badge.style.color = status === 'Active' ? '#2e7d32' : '#999';
+  badge.style.background = status === 'Active' ? '#e8f5e9' : '#f5f5f5';
+}
 var columnFilters = {};
 
-function loadEntries() { 
-  if (!SESSION_ID) return; 
-  document.getElementById('entriesTableBody').innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">Loading...</td></tr>'; 
-  google.script.run.withSuccessHandler(function(r) { 
-    if (r && r.success) { allEntries = r.entries; buildFilterOptions(); filterTable(); updateSummaryCards(r.summary); } 
-  }).getEntries(SESSION_ID); 
+function loadEntries(scope) {
+  scope = scope || (activeDashboardId === 'mainScreen' ? 'main' : activeDashboardId === 'superScreen' ? 'superadmin' : 'admin');
+  if (!SESSION_ID) return;
+  var tableBody = dashboardElement(scope === 'superadmin' ? 'superEntriesTableBody' : 'entriesTableBody');
+  tableBody.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">Loading...</td></tr>';
+  var handleResponse = function(r) {
+    if (r && r.success) {
+      allEntries = r.entries || [];
+      buildFilterOptions();
+      filterTable();
+      updateSummaryCards(r.summary || {});
+    } else {
+      tableBody.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#d32f2f;">Unable to load entries.</td></tr>';
+    }
+  };
+  var request = google.script.run
+    .withSuccessHandler(handleResponse)
+    .withFailureHandler(function() {
+      tableBody.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#d32f2f;">Unable to connect to server.</td></tr>';
+    });
+  if (scope === 'main') request.getEntriesForAgent(SESSION_ID);
+  else request.getEntries(SESSION_ID);
 }
 
 function renderTable(entries) { 
-  var tb = document.getElementById('entriesTableBody'); 
-  document.getElementById('entryCount').textContent = entries.length + ' Entr' + (entries.length !== 1 ? 'ies' : 'y'); 
+  var tb = dashboardElement(activeDashboardId === 'superScreen' ? 'superEntriesTableBody' : 'entriesTableBody');
+  dashboardElement(activeDashboardId === 'superScreen' ? 'superEntryCount' : 'entryCount').textContent = entries.length + ' Entr' + (entries.length !== 1 ? 'ies' : 'y');
   if (!entries.length) { tb.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">No entries found.</td></tr>'; return; } 
   var h = ''; 
   entries.forEach(function(e) { 
@@ -215,18 +663,35 @@ function renderTable(entries) {
 
 function getFilteredEntries() { 
   var f = allEntries.slice(); 
-  var st = document.getElementById('searchInput').value.trim().toLowerCase(); 
+  var st = dashboardElement(activeDashboardId === 'superScreen' ? 'superSearchInput' : 'searchInput').value.trim().toLowerCase();
   if (st) f = f.filter(function(e) { return (e.authorName&&e.authorName.toLowerCase().indexOf(st)>-1)||(e.book&&e.book.toLowerCase().indexOf(st)>-1)||(e.isbn&&e.isbn.toLowerCase().indexOf(st)>-1)||(e.assignedAgentName&&e.assignedAgentName.toLowerCase().indexOf(st)>-1)||(e.status&&e.status.toLowerCase().indexOf(st)>-1); }); 
   for (var field in columnFilters) { if (columnFilters[field] && columnFilters[field].length > 0) f = f.filter(function(e) { var v = ''; switch(field) { case 'author': v=e.authorName; break; case 'book': v=e.book; break; case 'agent': v=e.assignedAgentName; break; case 'status': v=e.status; break; } return columnFilters[field].indexOf(v) > -1; }); } 
   if (activeStatusFilter) f = f.filter(function(e) { return e.status === activeStatusFilter; }); 
   return f; 
 }
 
-function filterTable() { renderTable(getFilteredEntries()); }
+
+function filterTable() {
+  var dashboard = document.getElementById(activeDashboardId);
+  var usersTab = dashboard && dashboard.querySelector('#Users');
+  if (usersTab && usersTab.style.display !== 'none') {
+    var searchInput = dashboardElement(activeDashboardId === 'superScreen' ? 'superSearchInput' : 'searchInput');
+    var search = searchInput ? searchInput.value.trim().toLowerCase() : '';
+    var filteredUsers = allUsers.filter(function(user) {
+      return !search || [user.name, user.email, user.position, user.role, user.status, user.ip].some(function(value) {
+        return value && value.toString().toLowerCase().indexOf(search) > -1;
+      });
+    });
+    renderUsers(filteredUsers);
+    return;
+  }
+  renderTable(getFilteredEntries());
+}
 
 function buildFilterOptions() { 
   ['author','book','status'].forEach(function(field) { 
-    var lc = document.querySelector('#filterDropdown-'+field+' .filter-options-list'); 
+    var dashboard = document.getElementById(activeDashboardId);
+    var lc = dashboard && dashboard.querySelector('#filterDropdown-'+field+' .filter-options-list');
     if (!lc) return; 
     var vals = {}; 
     allEntries.forEach(function(e) { var v = ''; switch(field){case'author':v=e.authorName;break;case'book':v=e.book;break;case'status':v=e.status;break;} if(v)vals[v]=(vals[v]||0)+1; }); 
@@ -239,8 +704,10 @@ function buildFilterOptions() {
 
 function toggleFilterDropdown(event, field) { 
   event.preventDefault(); event.stopPropagation(); 
-  var dd = document.getElementById('filterDropdown-'+field); 
-  document.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';}); 
+  var dd = dashboardElement('filterDropdown-'+field);
+  var dashboard = document.getElementById(activeDashboardId);
+  if (!dd || !dashboard) return false;
+  dashboard.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';});
   dd.style.display = dd.style.display === 'block' ? 'none' : 'block'; 
   if (dd.style.display === 'block') buildFilterOptions(); 
   return false; 
@@ -248,7 +715,8 @@ function toggleFilterDropdown(event, field) {
 
 function filterDropdownOptions(input, field) { 
   var st = input.value.toLowerCase(); 
-  document.querySelectorAll('#filterDropdown-'+field+' .filter-options-list div').forEach(function(o) { o.style.display = o.textContent.toLowerCase().indexOf(st) > -1 ? 'flex' : 'none'; }); 
+  var dashboard = document.getElementById(activeDashboardId);
+  if (dashboard) dashboard.querySelectorAll('#filterDropdown-'+field+' .filter-options-list div').forEach(function(o) { o.style.display = o.textContent.toLowerCase().indexOf(st) > -1 ? 'flex' : 'none'; });
 }
 
 function toggleColumnFilter(field, value, event) { 
@@ -262,16 +730,134 @@ function toggleColumnFilter(field, value, event) {
 }
 
 document.addEventListener('click', function(event) { 
+  if (!event.target.closest('#notif')) {
+    var notification = dashboardElement('notif');
+    if (notification) {
+      notification.classList.remove('is-open');
+      notification.setAttribute('aria-expanded', 'false');
+    }
+  }
+  if (!event.target.closest('.settings')) {
+    var settingsCard = dashboardElement('settingsCard');
+    var settingsButton = document.getElementById(activeDashboardId) && document.getElementById(activeDashboardId).querySelector('.setting-icon');
+    if (settingsCard) settingsCard.classList.remove('is-open');
+    if (settingsButton) settingsButton.setAttribute('aria-expanded', 'false');
+  }
   if (!event.target.closest('.dropdown-content') && !event.target.closest('.filter-btn')) { 
-    document.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';}); 
+    var dashboard = document.getElementById(activeDashboardId);
+    if (dashboard) dashboard.querySelectorAll('.dropdown-content').forEach(function(d){d.style.display='none';});
   } 
 });
 
-function updateSummaryCards(s) { 
-  document.getElementById('totalCount').textContent = s.totalAssigned || 0; 
-  document.getElementById('pipeCount').textContent = s.pipeCount || 0; 
-  document.getElementById('soldCount').textContent = s.soldCount || 0; 
+function toggleSettings(event) {
+  event.stopPropagation();
+  var settingsCard = dashboardElement('settingsCard');
+  var settingsButton = event.currentTarget;
+  if (!settingsCard) return;
+  var isOpen = settingsCard.classList.toggle('is-open');
+  settingsButton.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
 }
+
+function toggleNotifications(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var notification = dashboardElement('notif');
+  if (!notification) return;
+  var isOpen = notification.classList.toggle('is-open');
+  notification.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+  if (isOpen) loadTransferRequestNotifications();
+}
+
+function updateSummaryCards(s) { 
+  dashboardElement('totalCount').textContent = s.totalAssigned || 0;
+  dashboardElement('pipeCount').textContent = s.pipeCount || 0;
+  dashboardElement('soldCount').textContent = s.soldCount || 0;
+  ['pending', 'vm', 'dnc', 'exclusive', 'delete'].forEach(function(status) {
+    var count = dashboardElement(status + 'Count');
+    if (count) count.textContent = s[status + 'Count'] || 0;
+  });
+  updateNotifications(s.pendingCount || 0);
+}
+
+function updateNotifications(count) {
+  var notification = dashboardElement('notif');
+  if (!notification) return;
+  var badge = notification.querySelector('.notif-count');
+  var text = notification.querySelector('.notif-text');
+  var notificationCount = Number(count) || 0;
+  badge.textContent = notificationCount > 99 ? '99+' : notificationCount;
+  text.textContent = notificationCount ? notificationCount + ' pending lead' + (notificationCount === 1 ? '' : 's') : 'No new notifications';
+  loadTransferRequestNotifications();
+}
+
+function loadTransferRequestNotifications() {
+  if ((activeDashboardId !== 'superScreen' && activeDashboardId !== 'adminScreen') || !SESSION_ID) return;
+  google.script.run.withSuccessHandler(function(response) {
+    if (!response || !response.success) return;
+    var notification = dashboardElement('notif');
+    if (!notification) return;
+    var badge = notification.querySelector('.notif-count');
+    var text = notification.querySelector('.notif-text');
+    var requests = response.requests || [];
+    transferNotificationRequests = requests;
+    badge.textContent = response.count > 99 ? '99+' : response.count;
+    text.innerHTML = requests.length ? requests.map(function(request) {
+      return '<button type="button" class="notif-request" onclick="selectTransferRequest(event, ' + requests.indexOf(request) + ')">Request Transfer From ' + escapeHtml(request.agentName) + '</button>';
+    }).join('') : 'No new notifications';
+  }).getTransferRequestNotifications(SESSION_ID);
+}
+
+function selectTransferRequest(event, requestIndex) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  var request = transferNotificationRequests[requestIndex];
+  if (!request) return;
+  openTransferReviewModal(request);
+}
+
+function openTransferReviewModal(request) {
+  var modal = dashboardElement('transferReviewModal');
+  if (!modal) return;
+  dashboardElement('transferReviewAgent').textContent = request.agentName || 'Unknown Agent';
+  dashboardElement('transferReviewDecision').value = 'Approve';
+  dashboardElement('transferReviewNote').value = '';
+  modal.style.display = 'flex';
+  modal.dataset.rowNumber = request.rowNumber;
+}
+
+function closeTransferReviewModal() {
+  var modal = dashboardElement('transferReviewModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function submitTransferReview(event) {
+  event.preventDefault();
+  var modal = dashboardElement('transferReviewModal');
+  var rowNumber = modal && modal.dataset.rowNumber;
+  var decision = dashboardElement('transferReviewDecision').value;
+  var note = dashboardElement('transferReviewNote').value.trim();
+  google.script.run.withSuccessHandler(function(response) {
+    if (response && response.success) {
+      closeTransferReviewModal();
+      loadTransferRequestNotifications();
+      showToast('Transfer request reviewed.', 'success');
+    } else showToast(response && response.message ? response.message : 'Unable to review transfer request.', 'error');
+  }).withFailureHandler(function() { showToast('Unable to connect to server.', 'error'); }).reviewTransferRequest(SESSION_ID, rowNumber, decision, note);
+}
+
+function refreshTransferNotifications(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  loadTransferRequestNotifications();
+}
+
+
 
 function filterByStatus(status) { 
   activeStatusFilter = activeStatusFilter === status ? null : status; 
@@ -290,44 +876,45 @@ function selectEntry(entryId) {
   if (!selectedEntryData) return; 
   selectedEntryId = numEntryId; 
   isEditMode = false;
-  document.getElementById('detailEmpty').style.display = 'none'; 
-  document.getElementById('detailContent').style.display = 'flex'; 
+  dashboardElement('detailEmpty').style.display = 'none';
+  dashboardElement('detailContent').style.display = 'flex';
+  dashboardElement('userDetailContent').style.display = 'none';
   setViewMode();
-  document.getElementById('detailAuthorNameView').textContent = selectedEntryData.authorName || '-'; 
-  document.getElementById('detailPhonesView').textContent = selectedEntryData.phones || '-'; 
-  document.getElementById('detailEmailView').textContent = selectedEntryData.email || '-'; 
-  document.getElementById('detailBookView').textContent = selectedEntryData.book || '-'; 
-  document.getElementById('detailISBNView').textContent = selectedEntryData.isbn || '-'; 
-  document.getElementById('detailAddressView').textContent = selectedEntryData.address || '-';
-  document.getElementById('detailAuthorNameEdit').value = selectedEntryData.authorName || ''; 
-  document.getElementById('detailPhonesEdit').value = selectedEntryData.phones || ''; 
-  document.getElementById('detailEmailEdit').value = selectedEntryData.email || ''; 
-  document.getElementById('detailBookEdit').value = selectedEntryData.book || ''; 
-  document.getElementById('detailISBNEdit').value = selectedEntryData.isbn || ''; 
-  document.getElementById('detailAddressEdit').value = selectedEntryData.address || '';
-  document.getElementById('detailStatusSelect').value = selectedEntryData.status || ''; 
+  dashboardElement('detailAuthorNameView').textContent = selectedEntryData.authorName || '-';
+  dashboardElement('detailPhonesView').textContent = selectedEntryData.phones || '-';
+  dashboardElement('detailEmailView').textContent = selectedEntryData.email || '';
+  dashboardElement('detailBookView').textContent = selectedEntryData.book || '-';
+  dashboardElement('detailISBNView').textContent = selectedEntryData.isbn || '-';
+  dashboardElement('detailAddressView').textContent = selectedEntryData.address || '-';
+  dashboardElement('detailAuthorNameEdit').value = selectedEntryData.authorName || '';
+  dashboardElement('detailPhonesEdit').value = selectedEntryData.phones || '';
+  dashboardElement('detailEmailEdit').value = selectedEntryData.email || '';
+  dashboardElement('detailBookEdit').value = selectedEntryData.book || '';
+  dashboardElement('detailISBNEdit').value = selectedEntryData.isbn || '';
+  dashboardElement('detailAddressEdit').value = selectedEntryData.address || '';
+  dashboardElement('detailStatusSelect').value = selectedEntryData.status || '';
   updateStatusBadge(selectedEntryData.status);
   showingAllActivity = false; 
-  document.getElementById('toggleActivityBtn').textContent = 'Show All Activity'; 
+  dashboardElement('toggleActivityBtn').textContent = 'Show All Activity';
   loadRemarksOnly();
-  document.getElementById('remarkInput').value = '';
+  dashboardElement('remarkInput').value = '';
 }
 
 function setViewMode() { 
-  document.getElementById('editBtn').style.display = 'inline-block'; 
-  document.getElementById('saveEditBtn').style.display = 'none'; 
-  document.getElementById('cancelEditBtn').style.display = 'none'; 
-  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){document.getElementById(id).style.display='block';}); 
-  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){document.getElementById(id).style.display='none';}); 
+  dashboardElement('editBtn').style.display = 'inline-block';
+  dashboardElement('saveEditBtn').style.display = 'none';
+  dashboardElement('cancelEditBtn').style.display = 'none';
+  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){dashboardElement(id).style.display='block';});
+  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){dashboardElement(id).style.display='none';});
   isEditMode = false; 
 }
 
 function toggleEditMode() { 
-  document.getElementById('editBtn').style.display = 'none'; 
-  document.getElementById('saveEditBtn').style.display = 'inline-block'; 
-  document.getElementById('cancelEditBtn').style.display = 'inline-block'; 
-  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){document.getElementById(id).style.display='none';}); 
-  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){document.getElementById(id).style.display='block';}); 
+  dashboardElement('editBtn').style.display = 'none';
+  dashboardElement('saveEditBtn').style.display = 'inline-block';
+  dashboardElement('cancelEditBtn').style.display = 'inline-block';
+  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){dashboardElement(id).style.display='none';});
+  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){dashboardElement(id).style.display='block';});
   isEditMode = true; 
 }
 
@@ -339,19 +926,19 @@ function saveEntryEdits() {
     if (r.success) { showToast('Updated!', 'success'); setViewMode(); selectEntry(selectedEntryId); loadEntries(); } 
     else { showToast(r.message, 'error'); } 
   }).updateEntry(SESSION_ID, selectedEntryId, {
-    authorName: document.getElementById('detailAuthorNameEdit').value.trim(),
-    phones: document.getElementById('detailPhonesEdit').value.trim(),
-    email: document.getElementById('detailEmailEdit').value.trim(),
-    book: document.getElementById('detailBookEdit').value.trim(),
-    isbn: document.getElementById('detailISBNEdit').value.trim(),
-    address: document.getElementById('detailAddressEdit').value.trim()
+    authorName: dashboardElement('detailAuthorNameEdit').value.trim(),
+    phones: dashboardElement('detailPhonesEdit').value.trim(),
+    email: dashboardElement('detailEmailEdit').value.trim(),
+    book: dashboardElement('detailBookEdit').value.trim(),
+    isbn: dashboardElement('detailISBNEdit').value.trim(),
+    address: dashboardElement('detailAddressEdit').value.trim()
   }); 
 }
 
 function deleteCurrentEntry() { 
   showConfirm('Delete', 'Delete this entry?', function() { 
     google.script.run.withSuccessHandler(function(r) { 
-      if (r.success) { showToast('Deleted.', 'success'); loadEntries(); document.getElementById('detailEmpty').style.display = 'block'; document.getElementById('detailContent').style.display = 'none'; } 
+      if (r.success) { showToast('Deleted.', 'success'); loadEntries(); dashboardElement('detailEmpty').style.display = 'block'; dashboardElement('detailContent').style.display = 'none'; }
       else { showToast(r.message, 'error'); } 
     }).deleteEntry(SESSION_ID, selectedEntryId); 
   }, '#d32f2f'); 
@@ -359,30 +946,32 @@ function deleteCurrentEntry() {
 
 function changeEntryStatus() { 
   google.script.run.withSuccessHandler(function(r) { 
-    if (r.success) { updateStatusBadge(document.getElementById('detailStatusSelect').value); showToast('Updated!', 'success'); loadEntries(); } 
-  }).updateEntryStatus(SESSION_ID, selectedEntryId, document.getElementById('detailStatusSelect').value); 
+    if (r.success) { updateStatusBadge(dashboardElement('detailStatusSelect').value); showToast('Updated!', 'success'); loadEntries(); }
+  }).updateEntryStatus(SESSION_ID, selectedEntryId, dashboardElement('detailStatusSelect').value);
 }
 
+
 function updateStatusBadge(status) { 
-  var b = document.getElementById('detailStatus'); 
+  var b = dashboardElement('detailStatus');
   if (!status || status === '') { b.style.background = '#f5f5f5'; b.style.color = '#999'; b.textContent = 'None'; } 
   else if (status === 'Sold') { b.style.background = '#e8f5e9'; b.style.color = '#2e7d32'; } 
   else if (status === 'DNC') { b.style.background = '#ffebee'; b.style.color = '#c62828'; } 
   else if (status === 'VM') { b.style.background = '#fce4ec'; b.style.color = '#c2185b'; } 
   else { b.style.background = '#fff3e0'; b.style.color = '#e67e22'; } 
   b.textContent = status || 'None'; 
+
 }
 
 // ========== REMARKS & ACTIVITY ==========
 function toggleActivityView() { 
-  if (showingAllActivity) { showingAllActivity = false; document.getElementById('toggleActivityBtn').textContent = 'Show All Activity'; loadRemarksOnly(); } 
-  else { showingAllActivity = true; document.getElementById('toggleActivityBtn').textContent = 'Show Remarks Only'; loadEntryActivity(); } 
+  if (showingAllActivity) { showingAllActivity = false; dashboardElement('toggleActivityBtn').textContent = 'Show All Activity'; loadRemarksOnly(); }
+  else { showingAllActivity = true; dashboardElement('toggleActivityBtn').textContent = 'Show Remarks Only'; loadEntryActivity(); }
 }
 
 function loadRemarksOnly() { 
   if (!selectedEntryId) return; 
   google.script.run.withSuccessHandler(function(remarks) { 
-    var c = document.getElementById('remarksList'); 
+    var c = dashboardElement('remarksList');
     if (!remarks || remarks.length === 0) { c.innerHTML = '<div style="color:#b8a88a;font-size:12px;text-align:center;padding:20px;">No remarks yet.</div>'; return; } 
     var h = ''; 
     remarks.forEach(function(r) { 
@@ -396,7 +985,7 @@ function loadRemarksOnly() {
 function loadEntryActivity() { 
   if (!selectedEntryId) return; 
   google.script.run.withSuccessHandler(function(items) { 
-    var c = document.getElementById('remarksList'); 
+    var c = dashboardElement('remarksList');
     if (!items || items.length === 0) { c.innerHTML = '<div style="color:#b8a88a;font-size:12px;text-align:center;padding:20px;">No activity yet.</div>'; return; } 
     var h = ''; 
     items.forEach(function(item) { 
@@ -409,10 +998,10 @@ function loadEntryActivity() {
 }
 
 function addRemark() { 
-  var txt = document.getElementById('remarkInput').value.trim(); 
+  var txt = dashboardElement('remarkInput').value.trim();
   if (!txt) return; 
   google.script.run.withSuccessHandler(function(r) { 
-    if (r.success) { document.getElementById('remarkInput').value = ''; if (showingAllActivity) loadEntryActivity(); else loadRemarksOnly(); } 
+    if (r.success) { dashboardElement('remarkInput').value = ''; if (showingAllActivity) loadEntryActivity(); else loadRemarksOnly(); }
   }).addRemark(SESSION_ID, selectedEntryId, txt); 
 }
 
@@ -425,8 +1014,12 @@ document.addEventListener('keydown', function(e) {
 });
 
 document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById('confirmBtn').addEventListener('click', function() { closeConfirm(true); });
-  document.getElementById('confirmOverlay').addEventListener('click', function(e) { if (e.target === document.getElementById('confirmOverlay')) closeConfirm(false); });
+  document.querySelectorAll('.confirm-overlay #confirmBtn').forEach(function(button) {
+    button.addEventListener('click', function() { closeConfirm(true); });
+  });
+  document.querySelectorAll('.confirm-overlay').forEach(function(overlay) {
+    overlay.addEventListener('click', function(e) { if (e.target === overlay && overlay.id === 'confirmOverlay') closeConfirm(false); });
+  });
   //document.getElementById('addEntryModal').addEventListener('click', function(e) { if (e.target === document.getElementById('addEntryModal')) closeEntryModal(); });
   ['entryAuthorName','entryBook','entryISBN'].forEach(function(id) { 
     var el = document.getElementById(id); if (el) el.addEventListener('input', updateEntrySubmitButton); 
