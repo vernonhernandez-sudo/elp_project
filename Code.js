@@ -7,54 +7,76 @@ function doGet(e) {
 function include(filename) { return HtmlService.createHtmlOutputFromFile(filename).getContent(); }
 
 // ========== SIMPLE LOGIN (No 2FA, No Roles) ==========
-function loginUser(username, password) {
-  if (!username || !password) return { success: false, message: 'Username and password required.' };
+function loginUser(email, password) {
+  if (!email || !password) return { success: false, message: 'Email and password required.' };
   try {
     var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Agents');
     var data = sheet.getDataRange().getValues(); data.shift();
     for (var i = 0; i < data.length; i++) {
       var row = data[i];
-      var storedUsername = row[1] ? row[1].toString().trim().toLowerCase() : '';
+      var storedEmail = row[4] ? row[4].toString().trim().toLowerCase() : '';
       var storedPassword = row[2] ? row[2].toString().trim() : '';
-      if (storedUsername === username.toLowerCase() && storedPassword === password) {
+      if (storedEmail === email.toLowerCase() && storedPassword === password) {
         var accountStatus = (row[8] || 'Active').toString().trim().toLowerCase();
         if (accountStatus !== 'active') {
           var statusMessage = accountStatus === 'suspended' ? 'Account is suspended.' : 'Account is inactive.';
           return { success: false, message: statusMessage + ' Please contact an administrator.' };
         }
-        var user = { id: row[0], username: row[1], name: row[3], email: row[4], role: row[7] };
+        var user = { id: row[0], username: row[1], name: row[3], email: row[4], team: row[5], role: row[7] || '' };
+        if (isShiftRestrictedRole(user.role) && !isWithinSalesShift()) {
+          return { success: false, message: 'Login is available during the assigned shift only.' };
+        }
         var sessionId = Utilities.getUuid();
-        CacheService.getScriptCache().put(sessionId, JSON.stringify(user), 21600);
-        return { success: true, sessionId: sessionId, user: { name: user.name, email: user.email, role: user.role } };
+        if (isSessionLimitedRole(user.role)) {
+          user.expiresAt = Date.now() + SESSION_DURATION_MS;
+        }
+        saveSession(sessionId, user);
+        return { success: true, sessionId: sessionId, user: { id: user.id, name: user.name, email: user.email, team: user.team, role: user.role } };
       }
     }
-    return { success: false, message: 'Invalid username or password.' };
-  } catch (error) { return { success: false, message: 'Error: ' + error.toString() }; }
+    return { success: false, message: 'Invalid email or password.' };
+  } catch (error) {
+    return { success: false, message: 'Error: ' + error.toString() };
+  }
 }
+
+// ========== LOGIN & SESSION MANAGEMENT ==========
 
 function getUserFromCache(sessionId) {
   if (!sessionId) return null;
   try {
-    var data = CacheService.getScriptCache().get(sessionId);
-    if (!data) return null;
-    var user = JSON.parse(data);
+    var user = getStoredSession(sessionId);
+    if (!user) return null;
     if (!user.role && user.id !== undefined && user.id !== null && user.id !== '') {
       var agents = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Agents').getDataRange().getValues();
       for (var i = 1; i < agents.length; i++) {
         if (String(agents[i][0]) === String(user.id)) {
           user.role = agents[i][7] || '';
-          CacheService.getScriptCache().put(sessionId, JSON.stringify(user), 21600);
+          if (!user.team) user.team = agents[i][5] || '';
+          saveSession(sessionId, user);
           break;
         }
       }
+    }
+    if (isSessionLimitedRole(user.role) && (!user.expiresAt || Date.now() > Number(user.expiresAt))) {
+      removeStoredSession(sessionId);
+      return null;
     }
     return user;
   } catch (e) { return null; }
 }
 
 function logoutUser(sessionId) {
-  if (sessionId) try { CacheService.getScriptCache().remove(sessionId); } catch (e) {}
+  if (sessionId) {
+    try { CacheService.getScriptCache().remove(sessionId); } catch (e) {}
+    removeStoredSession(sessionId);
+  }
   return { success: true };
+}
+
+function validateSession(sessionId) {
+  var user = getUserFromCache(sessionId);
+  return user ? { success: true, user: user } : { success: false, message: 'Session expired.' };
 }
 
 // ========== ENTRY MANAGEMENT (Simplified) ==========
@@ -171,14 +193,15 @@ function getEntriesForAgent(sessionId) { try {
     var ad = agentsSheet.getDataRange().getValues();
     if (ad.length > 0) { ad.shift(); }
     var am = {};
-    for (var k = 0; k < ad.length; k++) { var agentId = ad[k][0]; var agentName = ad[k][3]; if (agentId !== '' && agentId != null) { am[String(agentId)] = agentName || ''; } }
+    var ar = {};
+    for (var k = 0; k < ad.length; k++) { var agentId = ad[k][0]; var agentName = ad[k][3]; if (agentId !== '' && agentId != null) { am[String(agentId)] = agentName || ''; ar[String(agentId)] = ad[k][7] || ''; } }
     var loggedInUserId = u.id;
 
     if (loggedInUserId === undefined || loggedInUserId === null || loggedInUserId === '') { return { success: false, entries: [], summary: { pipeCount: 0, soldCount: 0, totalAssigned: 0 } }; }
 
     loggedInUserId = String(loggedInUserId);
     var entries = [];
-    for (var i = 0; i < ed.length; i++) { var assignedAgentId = ed[i][7]; if ( assignedAgentId === '' || assignedAgentId === null || assignedAgentId === undefined ) { continue; } if (String(assignedAgentId) !== loggedInUserId) { continue; } var assignedAgentName = am[String(assignedAgentId)] || 'Unassigned'; entries.push({ id: ed[i][0], authorName: ed[i][1] || '', phones: ed[i][2] || '', email: ed[i][3] || '', book: ed[i][4] || '', isbn: ed[i][5] || '', address: ed[i][6] || '', assignedAgentId: assignedAgentId, assignedAgentName: assignedAgentName, status: ed[i][8] || '', createdAt: ed[i][9] || '' }); }
+    for (var i = 0; i < ed.length; i++) { var assignedAgentId = ed[i][7]; if ( assignedAgentId === '' || assignedAgentId === null || assignedAgentId === undefined ) { continue; } if (String(assignedAgentId) !== loggedInUserId) { continue; } var assignedAgentName = am[String(assignedAgentId)] || 'Unassigned'; entries.push({ id: ed[i][0], authorName: ed[i][1] || '', phones: ed[i][2] || '', email: ed[i][3] || '', book: ed[i][4] || '', isbn: ed[i][5] || '', address: ed[i][6] || '', assignedAgentId: assignedAgentId, assignedAgentName: assignedAgentName, minedById: assignedAgentId, minedByRole: ar[String(assignedAgentId)] || '', status: ed[i][8] || '', createdAt: ed[i][9] || '' }); }
 
     var pipeCount = 0;
     var soldCount = 0;
@@ -252,6 +275,71 @@ function updateEntryStatus(sessionId, entryId, newStatus) {
     } 
     return{success:false,message:'Not found.'}; 
   } catch(e){return{success:false,message:'Error'};}
+}
+
+// ========== GRACE PERIOD AND WRONG NUMBER ==========
+function getEntryRowForAction(sheet, entryId) {
+  var values = sheet.getDataRange().getValues();
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][0]) === String(entryId)) return i + 1;
+  }
+  return 0;
+}
+
+function getOrCreateEntryColumn(sheet, columnName) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i]).trim().toLowerCase() === columnName.toLowerCase()) return i + 1;
+  }
+  var column = headers.length + 1;
+  sheet.getRange(1, column).setValue(columnName);
+  return column;
+}
+
+function extendLeadGracePeriod(sessionId, entryId) {
+  try {
+    var user = getUserFromCache(sessionId);
+    if (!user) return { success: false, message: 'Session expired.' };
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Entries');
+    var row = getEntryRowForAction(sheet, entryId);
+    if (!row) return { success: false, message: 'Lead not found.' };
+    var status = String(sheet.getRange(row, 9).getValue() || '').trim();
+    if (['', 'Pipe', 'VM'].indexOf(status) === -1) {
+      return { success: false, message: 'Grace period cannot be extended for this status.' };
+    }
+    var startedAtColumn = getOrCreateEntryColumn(sheet, 'StatusStartedAt');
+    sheet.getRange(row, startedAtColumn).setValue(new Date().toISOString());
+    logActivity(user.id, user.name, 'Extended grace period for #' + entryId);
+    return { success: true, message: 'Grace period extended.' };
+  } catch (e) {
+    Logger.log('extendLeadGracePeriod error: ' + e);
+    return { success: false, message: 'Unable to extend grace period.' };
+  }
+}
+
+function markLeadWrongNumber(sessionId, entryId) {
+  try {
+    var user = getUserFromCache(sessionId);
+    if (!user) return { success: false, message: 'Session expired.' };
+    var sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName('Entries');
+    var row = getEntryRowForAction(sheet, entryId);
+    if (!row) return { success: false, message: 'Lead not found.' };
+    var assignedAgentId = String(sheet.getRange(row, 8).getValue() || '').trim();
+    var role = String(user.role || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+    if (role !== 'admin' && role !== 'superadmin' && assignedAgentId !== String(user.id)) {
+      return { success: false, message: 'You can only mark your assigned leads.' };
+    }
+    sheet.getRange(row, 9).setValue('Wrong Number');
+    sheet.getRange(row, 8).clearContent();
+    var startedAtColumn = getOrCreateEntryColumn(sheet, 'StatusStartedAt');
+    sheet.getRange(row, startedAtColumn).clearContent();
+    logActivity(user.id, user.name, 'Marked lead #' + entryId + ' as Wrong Number');
+    addSystemRemark(entryId, user.name, 'Lead marked as Wrong Number and returned for re-mining.');
+    return { success: true, message: 'Lead marked as Wrong Number.' };
+  } catch (e) {
+    Logger.log('markLeadWrongNumber error: ' + e);
+    return { success: false, message: 'Unable to mark lead as Wrong Number.' };
+  }
 }
 
 // ========== REMARKS ==========
@@ -572,4 +660,387 @@ function deleteUser(sessionId, userId) {
     }
     return { success: false, message: 'User not found.' };
   } catch (e) { return { success: false, message: 'Error: ' + e.toString() }; }
+}
+
+
+// ========== TRANSFER TARGETS ==========
+
+function getTransferTargets(sessionId) {
+
+  try {
+    var user = getUserFromCache(sessionId);
+    if (!user) { return { success: false, message: 'Session expired.', targets: [] }; }
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName('Agents');
+    if (!sheet) { return { success: false, message: 'Agents sheet not found.', targets: [] }; }
+    var data = sheet.getDataRange().getValues();
+    if (data.length <= 1) { return { success: true, targets: [] }; }
+    data.shift();
+    var targets = [];
+    for (var i = 0; i < data.length; i++) {
+      var row = data[i];
+
+      /*
+       * Agents columns:
+       *
+       * [0] AgentID
+       * [1] Username
+       * [2] Password
+       * [3] Name
+       * [4] Email
+       * [5] Team
+       * [6] Phone
+       * [7] Role
+       * [8] Status
+       * [9] VerificationToken
+       */
+
+      var agentId = row[0];
+      var name = row[3];
+      var role = row[7]
+        ? row[7].toString().trim()
+        : '';
+
+      var status = row[8]
+        ? row[8].toString().trim()
+        : '';
+
+      /*
+       * Only Active users can receive transfers.
+       */
+      if (status !== 'Active') { continue; }
+      /*
+       * Sales Partners can transfer to:
+       * - Admin
+       * - Other Sales Partners
+       *
+       * Super Admin is intentionally not included
+       * because Super Admin can manage transfers directly.
+       */
+      if ( role !== 'Sales Partner' && role !== 'Admin' ) { continue; }
+      /*
+       * Do not show the currently logged-in Sales Partner
+       * as a transfer target.
+       */
+      
+      if (String(agentId) === String(user.id)) { continue; }
+
+    targets.push({ id: agentId, name: name, role: role }); }
+    return { success: true, targets: targets };
+  } catch (e) {
+    console.error( 'getTransferTargets error: ' + e.message + ' | Stack: ' + e.stack );
+    return { success: false, message: 'Unable to load transfer targets.', targets: [] }; }
+}
+
+// ========== CREATE TRANSFER REQUEST ==========
+function createTransferRequest(sessionId, entryId, targetAgentId, reason) {
+  try {
+    var requester = getUserFromCache(sessionId);
+    if (!requester) { return { success: false, message: 'Session expired.' }; }
+    
+    var spreadsheet = SpreadsheetApp.openById(SHEET_ID);
+    var entriesSheet = spreadsheet.getSheetByName('Entries');
+    var agentsSheet = spreadsheet.getSheetByName('Agents');
+    var transferSheet = spreadsheet.getSheetByName('TransferRequests');
+    
+    if (!entriesSheet || !agentsSheet || !transferSheet) {
+      return { success: false, message: 'Required sheets not found.' };
+    }
+    
+    // Verify entry exists
+    var entryData = entriesSheet.getDataRange().getValues();
+    var entryFound = false;
+    var entryRowData = null;
+    for (var i = 1; i < entryData.length; i++) {
+      if (entryData[i][0] == entryId) {
+        entryFound = true;
+        entryRowData = entryData[i];
+        break;
+      }
+    }
+    
+    if (!entryFound) { return { success: false, message: 'Entry not found.' }; }
+    
+    // Verify target agent exists and is active
+    var agentsData = agentsSheet.getDataRange().getValues();
+    var targetAgent = null;
+    for (var j = 1; j < agentsData.length; j++) {
+      if (agentsData[j][0] == targetAgentId) {
+        targetAgent = agentsData[j];
+        break;
+      }
+    }
+    
+    if (!targetAgent) { return { success: false, message: 'Target agent not found.' }; }
+    if (targetAgent[8] !== 'Active') { return { success: false, message: 'Target agent is not active.' }; }
+    
+    // Create transfer request record
+    var currentTime = new Date().toISOString();
+    var transferRequestRow = [
+      transferSheet.getLastRow(),
+      entryId,
+      requester.id,
+      requester.name,
+      targetAgentId,
+      targetAgent[3],
+      entryRowData[1] || '',
+      reason || '',
+      'Pending',
+      currentTime,
+      'Pending'
+    ];
+    
+    transferSheet.appendRow(transferRequestRow);
+    SpreadsheetApp.flush();
+    
+    logActivity(requester.id, requester.name, 'Submitted transfer request for entry #' + entryId + ' to ' + targetAgent[3]);
+    
+    return { 
+      success: true, 
+      message: 'Transfer request submitted for approval.' 
+    };
+  } catch (e) { 
+    return { success: false, message: 'Error: ' + e.toString() }; 
+  }
+}
+
+
+
+
+  // ========== LOGIN & SESSION MANAGEMENT ==========
+
+// Sales Partner / Lead Gen Specialist shift settings
+const SHIFT_TIMEZONE = 'Asia/Manila';
+const SHIFT_START_HOUR = 23;    // 11:45 PM PHT
+const SHIFT_START_MINUTE = 45;  // 11:45 PM PHT
+
+const SHIFT_END_HOUR = 10;      // 10:00 AM PHT
+const SHIFT_END_MINUTE = 0;     // 10:00 AM PHT
+
+const SESSION_DURATION_MS = 10 * 60 * 60 * 1000 + 30 * 60 * 1000;
+
+/**
+ * Returns the current date/time in Philippine Standard Time.
+ */
+function getPHTNow() {
+  return new Date(
+    Utilities.formatDate(new Date(), SHIFT_TIMEZONE, "yyyy/MM/dd HH:mm:ss")
+  );
+}
+
+/**
+ * Returns the PHT shift key.
+ *
+ * Example:
+ * 2026-08-21 03:00 PHT -> "2026-08-21"
+ * 2026-08-21 10:00 PHT -> "2026-08-21"
+ *
+ * The shift itself is only available from 12 AM to 10 AM.
+ */
+function getCurrentShiftKey() {
+  var now = new Date();
+
+  return Utilities.formatDate(
+    now,
+    SHIFT_TIMEZONE,
+    'yyyy-MM-dd'
+  );
+}
+
+/**
+ * Checks whether the current time is inside the
+ * 12:00 AM - 10:00 AM PHT login window.
+ */
+function isWithinSalesShift() {
+
+  var now = new Date();
+
+  var hour = Number(
+    Utilities.formatDate(
+      now,
+      SHIFT_TIMEZONE,
+      'H'
+    )
+  );
+
+  var minute = Number(
+    Utilities.formatDate(
+      now,
+      SHIFT_TIMEZONE,
+      'm'
+    )
+  );
+
+  var currentMinutes =
+    (hour * 60) + minute;
+
+  var startMinutes =
+    (23 * 60) + 45; // 11:45 PM
+
+  var endMinutes =
+    10 * 60; // 10:00 AM
+
+  /*
+   * Shift crosses midnight:
+   *
+   * 11:45 PM → 11:59 PM
+   * OR
+   * 12:00 AM → 9:59 AM
+   */
+
+  return (
+    currentMinutes >= startMinutes ||
+    currentMinutes < endMinutes
+  );
+}
+
+/**
+ * Gets the end time of the current PHT shift.
+ *
+ * The shift ends at 10:00 AM PHT on the current date.
+ */
+function getShiftEndTimestamp() {
+
+  var now = new Date();
+
+  var currentHour = Number(
+    Utilities.formatDate(
+      now,
+      SHIFT_TIMEZONE,
+      'H'
+    )
+  );
+
+  var currentMinute = Number(
+    Utilities.formatDate(
+      now,
+      SHIFT_TIMEZONE,
+      'm'
+    )
+  );
+
+  var currentMinutes =
+    (currentHour * 60) + currentMinute;
+
+  var endMinutes =
+    10 * 60; // 10:00 AM
+
+  /*
+   * If we are currently between
+   * 12:00 AM and 9:59 AM,
+   * the shift ends TODAY at 10:00 AM.
+   *
+   * If we are currently between
+   * 11:45 PM and 11:59 PM,
+   * the shift ends TOMORROW at 10:00 AM.
+   */
+
+  var endDate =
+    new Date(now);
+
+  if (currentMinutes >= 0 && currentMinutes < endMinutes) {
+
+    // Same calendar day
+    endDate.setDate(
+      endDate.getDate()
+    );
+
+  } else {
+
+    // Shift started at 11:45 PM,
+    // so 10:00 AM is tomorrow.
+    endDate.setDate(
+      endDate.getDate() + 1
+    );
+  }
+
+  var dateString =
+    Utilities.formatDate(
+      endDate,
+      SHIFT_TIMEZONE,
+      'yyyy-MM-dd'
+    );
+
+  var shiftEndString =
+    dateString + ' 10:00:00';
+
+  var parts =
+    shiftEndString.match(
+      /(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})/
+    );
+
+  var utcMillis =
+    Date.UTC(
+      Number(parts[1]),
+      Number(parts[2]) - 1,
+      Number(parts[3]),
+      Number(parts[4]) - 8,
+      Number(parts[5]),
+      Number(parts[6])
+    );
+
+  return utcMillis;
+}
+
+/**
+ * Stores the session in Script Properties.
+ *
+ * CacheService cannot safely hold an 8h10m session because
+ * Apps Script CacheService has a maximum expiration of 6 hours.
+ */
+function saveSession(sessionId, sessionData) {
+  PropertiesService
+    .getScriptProperties()
+    .setProperty(
+      'SESSION_' + sessionId,
+      JSON.stringify(sessionData)
+    );
+}
+
+/**
+ * Retrieves a session.
+ */
+function getStoredSession(sessionId) {
+  if (!sessionId) return null;
+
+  try {
+    var raw = PropertiesService
+      .getScriptProperties()
+      .getProperty('SESSION_' + sessionId);
+
+    if (!raw) return null;
+
+    return JSON.parse(raw);
+
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Removes a session.
+ */
+function removeStoredSession(sessionId) {
+  if (!sessionId) return;
+
+  try {
+    PropertiesService
+      .getScriptProperties()
+      .deleteProperty('SESSION_' + sessionId);
+  } catch (e) {}
+}
+
+/**
+ * Determines whether a user is subject to shift restrictions.
+ */
+function isShiftRestrictedRole(role) {
+
+  role = role ? role.toString().trim() : '';
+
+  return role === 'Sales Partner' ||
+         role === 'Lead Gen Specialist';
+}
+
+function isSessionLimitedRole(role) {
+  return String(role || '').trim().toLowerCase().replace(/[\s_-]+/g, '') !== 'superadmin';
 }

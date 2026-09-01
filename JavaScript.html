@@ -14,7 +14,33 @@ function normalizeRole(role) {
 
 function dashboardElement(id) {
   var dashboard = document.getElementById(activeDashboardId);
-  return dashboard ? dashboard.querySelector('#' + id) : document.getElementById(id);
+  if (dashboard) {
+    var scoped = dashboard.querySelector('#' + id);
+    if (scoped) return scoped;
+  }
+
+  var fallbackScreens = ['mainScreen', 'adminScreen', 'superScreen', 'leadgenScreen'];
+  for (var i = 0; i < fallbackScreens.length; i++) {
+    var screen = document.getElementById(fallbackScreens[i]);
+    if (screen) {
+      var screenElement = screen.querySelector('#' + id);
+      if (screenElement) return screenElement;
+    }
+  }
+
+  return document.getElementById(id);
+}
+
+function getObjectValue(row, key) {
+  if (!row) return '';
+  if (row[key] !== undefined && row[key] !== null) return row[key];
+  var normalizedKey = key.toLowerCase();
+  for (var prop in row) {
+    if (Object.prototype.hasOwnProperty.call(row, prop) && prop.toLowerCase() === normalizedKey) {
+      return row[prop];
+    }
+  }
+  return '';
 }
 
 (function() {
@@ -29,7 +55,6 @@ function dashboardElement(id) {
 
         var role = normalizeRole(u.role);
 
-        activeDashboardId = role === 'superadmin' ? 'superScreen' : role === 'admin' ? 'adminScreen' : 'mainScreen';
         currentUser = u;
         populateUser();
 
@@ -37,18 +62,8 @@ function dashboardElement(id) {
         console.log('Cached Role:', u.role);
         console.log('Normalized Cached Role:', role);
 
-        if (role === 'superadmin') {
-
-          showSuperAdmin();
-
-        } else if (role === 'admin') {
-
-          showAdmin();
-
-        } else {
-
-          showMain();
-        }
+        routeUserByRole();
+        startSessionMonitoring();
       }
 
     }).getUserFromCache(SESSION_ID);
@@ -57,16 +72,52 @@ function dashboardElement(id) {
 
 function showMain() {
   activeDashboardId = 'mainScreen';
-  document.getElementById('loginScreen').style.display = 'none';
+  var loginScreen = document.getElementById('loginScreen');
+  var adminScreen = document.getElementById('adminScreen');
+  var superScreen = document.getElementById('superScreen');
+  var leadgenScreen = document.getElementById('leadgenScreen');
+  if (loginScreen) loginScreen.style.display = 'none';
+  if (adminScreen) adminScreen.style.display = 'none';
+  if (superScreen) superScreen.style.display = 'none';
+  if (leadgenScreen) leadgenScreen.style.display = 'none';
   var m = document.getElementById('mainScreen'); 
   m.style.display = 'flex'; 
   m.style.flexDirection = 'column'; 
   m.style.height = '100vh'; 
   m.style.width = '100vw'; 
   m.style.background = 'linear-gradient(180deg, #800000 0%, #6b1010 8%, #999999 40%, #b0b0b0 70%, #e2e6ed 100%)';
+  populateUser();
   updateClock(); 
   setInterval(updateClock, 1000); 
   loadEntries('main');
+}
+
+function routeUserByRole() {
+  var role = normalizeRole(currentUser && currentUser.role);
+  if (role === 'superadmin') showSuperAdmin();
+  else if (role === 'admin') showAdmin();
+  else if (role === 'leadgenspecialist') showLeadgen();
+  else showMain();
+}
+
+function showLeadgen() {
+  activeDashboardId = 'leadgenScreen';
+  var loginScreen = document.getElementById('loginScreen');
+  var screens = ['mainScreen', 'adminScreen', 'superScreen'];
+  if (loginScreen) loginScreen.style.display = 'none';
+  screens.forEach(function(id) {
+    var screen = document.getElementById(id);
+    if (screen) screen.style.display = 'none';
+  });
+  var screen = document.getElementById('leadgenScreen');
+  if (!screen) return;
+  screen.style.display = 'flex';
+  screen.style.flexDirection = 'column';
+  screen.style.height = '100vh';
+  screen.style.width = '100vw';
+  populateUser();
+  updateClock();
+  loadEntries('leadgen');
 }
 
 // function showSuperAdmin() {
@@ -87,9 +138,11 @@ function showSuperAdmin() {
   var loginScreen = document.getElementById('loginScreen');
   var mainScreen = document.getElementById('mainScreen');
   var adminScreen = document.getElementById('adminScreen');
+  var leadgenScreen = document.getElementById('leadgenScreen');
   if (loginScreen) loginScreen.style.display = 'none';
   if (mainScreen) mainScreen.style.display = 'none';
   if (adminScreen) adminScreen.style.display = 'none';
+  if (leadgenScreen) leadgenScreen.style.display = 'none';
 
   var m = document.getElementById('superScreen');
   if (!m) return;
@@ -114,9 +167,11 @@ function showAdmin() {
   var loginScreen = document.getElementById('loginScreen');
   var mainScreen = document.getElementById('mainScreen');
   var superScreen = document.getElementById('superScreen');
+  var leadgenScreen = document.getElementById('leadgenScreen');
   if (loginScreen) loginScreen.style.display = 'none';
   if (mainScreen) mainScreen.style.display = 'none';
   if (superScreen) superScreen.style.display = 'none';
+  if (leadgenScreen) leadgenScreen.style.display = 'none';
   var m = document.getElementById('adminScreen'); 
   if (!m) return;
   m.style.display = 'flex'; 
@@ -153,7 +208,7 @@ if (usernameInput) {
 
 
 function updateClock() { 
-  var d = new Date(), el = dashboardElement('currentDate');
+  var d = new Date(), el = dashboardElement('currentDate') || dashboardElement('leadgenCurrentDate');
   if (el) el.textContent = d.toLocaleString('en-US', {timeZone: currentTimeZone, weekday:'long', year:'numeric', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit'}); 
 }
 
@@ -161,14 +216,16 @@ function populateUser() {
   if (!currentUser) return;
   var p = currentUser.name.split(' ').filter(Boolean), 
       ini = p.length > 1 ? (p[0][0]+p[p.length-1][0]).toUpperCase() : (p[0]||'').substring(0,2).toUpperCase();
-  var avatar = dashboardElement('avatar');
-  var userName = dashboardElement('userName');
-  var userEmail = dashboardElement('userEmail');
-  var userRole = dashboardElement('userRole');
+  var avatar = dashboardElement('agentAvatar') || dashboardElement('leadgenAvatar') || dashboardElement('avatar');
+  var userName = dashboardElement('userName') || dashboardElement('leadgenUserName');
+  var userEmail = dashboardElement('userEmail') || dashboardElement('leadgenUserEmail');
+  var userRole = dashboardElement('userRole') || dashboardElement('leadgenUserRole');
+    var userTeam = dashboardElement('userTeam');
   if (avatar) avatar.textContent = ini;
   if (userName) userName.textContent = currentUser.name;
   if (userEmail) userEmail.textContent = currentUser.email || '';
   if (userRole) userRole.textContent = currentUser.role || '';
+  if (userTeam) userTeam.textContent = currentUser.team || currentUser.position || '';
 }
 
 
@@ -176,8 +233,8 @@ function handleLogin(e) {
 
   e.preventDefault();
 
-  var usernameEl =
-    document.getElementById('username');
+  var emailEl =
+    document.getElementById('email');
 
   var passwordEl =
     document.getElementById('password');
@@ -187,16 +244,19 @@ function handleLogin(e) {
 
   var loginError =
     document.getElementById('loginError');
+  var emailPattern = /^[A-Z0-9._%+-]+@explorabooks\.com$/i;
 
-  if (!usernameEl || !passwordEl) { console.error('Login fields not found.'); return; }
+  if (!emailEl || !passwordEl) { console.error('Login fields not found.'); return; }
   var u =
-    usernameEl.value.trim();
+    emailEl.value.trim();
 
   var p =
     passwordEl.value;
 
   if (loginError) { loginError.style.display = 'none'; }
-  if (!u || !p) { if (loginError) { loginError.textContent = 'Please enter username and password.'; loginError.style.display = 'block'; } return; }
+  if (!u) { if (loginError) { loginError.textContent = 'Please enter your email address.'; loginError.style.display = 'block'; } return; }
+  if (!emailPattern.test(u)) { if (loginError) { loginError.textContent = 'Please use your @explorabooks.com email address.'; loginError.style.display = 'block'; } return; }
+  if (!p) { if (loginError) { loginError.textContent = 'Please enter your password.'; loginError.style.display = 'block'; } return; }
   if (loginButton) { loginButton.disabled = true; loginButton.textContent = 'Signing in...'; }
 
   google.script.run
@@ -214,10 +274,8 @@ function handleLogin(e) {
         SESSION_ID
       );
 
-      var role = normalizeRole(r.user && r.user.role ? r.user.role : '');
-
       currentUser = r.user;
-      activeDashboardId = role === 'superadmin' ? 'superScreen' : role === 'admin' ? 'adminScreen' : 'mainScreen';
+      var role = normalizeRole(currentUser && currentUser.role);
 
       console.log('Logged-in User:', currentUser);
 
@@ -225,11 +283,12 @@ function handleLogin(e) {
 
       console.log('User Role:', r.user.role);
       console.log('Normalized Role:', role);
-      if (role === 'superadmin') { showSuperAdmin(); } else if (role === 'admin') { showAdmin(); } else { showMain(); } })
+      routeUserByRole();
+      startSessionMonitoring(); })
 
-    .withFailureHandler(function(error) {
+    .withFailureHandler(function(serverError) {
 
-      console.error( 'loginUser() failed:', error );
+      console.error( 'loginUser() failed:', serverError );
       if (loginButton) { loginButton.disabled = false; loginButton.textContent = 'Sign In'; }
       if (loginError) { loginError.textContent = 'Unable to connect to server.'; loginError.style.display = 'block'; } }) .loginUser(u, p);
 }
@@ -237,6 +296,7 @@ function handleLogin(e) {
 function handleLogout() {
 
   // Logout from server
+  stopSessionMonitoring();
   if (SESSION_ID) {
     google.script.run.logoutUser(SESSION_ID);
   }
@@ -251,6 +311,7 @@ function handleLogout() {
   var mainScreen = document.getElementById('mainScreen');
   var adminScreen = document.getElementById('adminScreen');
   var superScreen = document.getElementById('superScreen');
+  var leadgenScreen = document.getElementById('leadgenScreen');
 
   if (mainScreen) {
     mainScreen.style.display = 'none';
@@ -262,6 +323,10 @@ function handleLogout() {
 
   if (superScreen) {
     superScreen.style.display = 'none';
+  }
+
+  if (leadgenScreen) {
+    leadgenScreen.style.display = 'none';
   }
 
   // Show login screen
@@ -328,16 +393,6 @@ function openUserModal() {
 
 function closeUserModal() {
   dashboardElement('addUserModal').style.display = 'none';
-}
-
-function updateUserPositionState() {
-  var role = dashboardElement('userRoleInput');
-  var position = dashboardElement('userPositionInput');
-  if (!role || !position) return;
-  var isSuperAdmin = role.value === 'Super Admin';
-  position.disabled = isSuperAdmin;
-  if (isSuperAdmin) position.value = '';
-  else if (!position.value) position.value = 'BM';
 }
 
 function updateUserPositionState() {
@@ -526,18 +581,28 @@ function selectUser(userId) {
   }
   if (!selectedUserData) return;
   selectedUserId = selectedUserData.id;
-  dashboardElement('detailEmpty').style.display = 'none';
-  dashboardElement('detailContent').style.display = 'none';
-  dashboardElement('userDetailContent').style.display = 'flex';
+
+  var detailEmpty = dashboardElement('detailEmpty');
+  var detailContent = dashboardElement('detailContent');
+  var userDetailContent = dashboardElement('userDetailContent');
+  if (detailEmpty) detailEmpty.style.display = 'none';
+  if (detailContent) detailContent.style.display = 'none';
+  if (userDetailContent) userDetailContent.style.display = 'flex';
+
   setUserViewMode();
   ['Username','Name','Email','Position','Role','Status','Ip'].forEach(function(field) {
-    var value = selectedUserData[field.toLowerCase()] || '-';
-    dashboardElement('userDetail' + field + 'View').textContent = value;
-    dashboardElement('userDetail' + field + 'Edit').value = selectedUserData[field.toLowerCase()] || '';
+    var key = field.toLowerCase();
+    var value = getObjectValue(selectedUserData, key) || '-';
+    var view = dashboardElement('userDetail' + field + 'View');
+    var edit = dashboardElement('userDetail' + field + 'Edit');
+    if (view) view.textContent = value;
+    if (edit) edit.value = getObjectValue(selectedUserData, key) || '';
   });
-  dashboardElement('userDetailPasswordEdit').value = '';
+
+  var passwordField = dashboardElement('userDetailPasswordEdit');
+  if (passwordField) passwordField.value = '';
   updateUserEditPositionState();
-  updateUserStatusBadge(selectedUserData.status);
+  updateUserStatusBadge(getObjectValue(selectedUserData, 'status'));
 }
 
 function setUserViewMode() {
@@ -615,10 +680,14 @@ function updateUserStatusBadge(status) {
 }
 var columnFilters = {};
 
-function loadEntries(scope) {
+function loadEntries(scope, onComplete) {
   scope = scope || (activeDashboardId === 'mainScreen' ? 'main' : activeDashboardId === 'superScreen' ? 'superadmin' : 'admin');
   if (!SESSION_ID) return;
-  var tableBody = dashboardElement(scope === 'superadmin' ? 'superEntriesTableBody' : 'entriesTableBody');
+  var tableBody = dashboardElement(scope === 'superadmin' ? 'superEntriesTableBody' : activeDashboardId === 'leadgenScreen' ? 'LeadentriesTableBody' : 'entriesTableBody');
+  if (!tableBody) {
+    console.error('Entries table not found for dashboard:', activeDashboardId);
+    return;
+  }
   tableBody.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">Loading...</td></tr>';
   var handleResponse = function(r) {
     if (r && r.success) {
@@ -626,6 +695,7 @@ function loadEntries(scope) {
       buildFilterOptions();
       filterTable();
       updateSummaryCards(r.summary || {});
+      if (typeof onComplete === 'function') onComplete();
     } else {
       tableBody.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#d32f2f;">Unable to load entries.</td></tr>';
     }
@@ -640,8 +710,10 @@ function loadEntries(scope) {
 }
 
 function renderTable(entries) { 
-  var tb = dashboardElement(activeDashboardId === 'superScreen' ? 'superEntriesTableBody' : 'entriesTableBody');
-  dashboardElement(activeDashboardId === 'superScreen' ? 'superEntryCount' : 'entryCount').textContent = entries.length + ' Entr' + (entries.length !== 1 ? 'ies' : 'y');
+  var tb = dashboardElement(activeDashboardId === 'superScreen' ? 'superEntriesTableBody' : activeDashboardId === 'leadgenScreen' ? 'LeadentriesTableBody' : 'entriesTableBody');
+  var count = dashboardElement(activeDashboardId === 'superScreen' ? 'superEntryCount' : 'entryCount');
+  if (!tb) return;
+  if (count) count.textContent = entries.length + ' Entr' + (entries.length !== 1 ? 'ies' : 'y');
   if (!entries.length) { tb.innerHTML = '<tr><td colspan="5" style="padding:60px;text-align:center;color:#aaa;">No entries found.</td></tr>'; return; } 
   var h = ''; 
   entries.forEach(function(e) { 
@@ -650,6 +722,7 @@ function renderTable(entries) {
     else if (e.status === 'Sold') { sc = '#2e7d32'; sb = '#e8f5e9'; }
     else if (e.status === 'DNC') { sc = '#c62828'; sb = '#ffebee'; }
     else if (e.status === 'VM') { sc = '#c2185b'; sb = '#fce4ec'; }
+    else if (e.status === 'Pending') { sc = '#f39c12'; sb = '#fef5e7'; }
     else { sc = '#e67e22'; sb = '#fff3e0'; }
     h += '<tr onclick="selectEntry('+e.id+')" style="cursor:pointer;border-bottom:1px solid #f0f0f0;" onmouseover="this.style.background=\'#f8f9fb\'" onmouseout="this.style.background=\'transparent\'">' +
       '<td style="padding:9px 12px;font-weight:500;text-align:center;">'+escapeHtml(e.authorName)+'</td>' +
@@ -771,9 +844,11 @@ function toggleNotifications(event) {
 }
 
 function updateSummaryCards(s) { 
-  dashboardElement('totalCount').textContent = s.totalAssigned || 0;
-  dashboardElement('pipeCount').textContent = s.pipeCount || 0;
-  dashboardElement('soldCount').textContent = s.soldCount || 0;
+  s = s || {};
+  ['totalCount', 'pipeCount', 'exclusiveCount', 'vmCount', 'dncCount', 'soldCount'].forEach(function(id) {
+    var count = dashboardElement(id);
+    if (count) count.textContent = s[id === 'totalCount' ? 'totalAssigned' : id.replace('Count', 'Count')] || 0;
+  });
   ['pending', 'vm', 'dnc', 'exclusive', 'delete'].forEach(function(status) {
     var count = dashboardElement(status + 'Count');
     if (count) count.textContent = s[status + 'Count'] || 0;
@@ -864,6 +939,11 @@ function filterByStatus(status) {
   filterTable(); 
 }
 
+function filterByTotal() {
+  activeStatusFilter = null;
+  filterTable();
+}
+
 // ========== DETAIL PANEL ==========
 var selectedEntryId = null; 
 var selectedEntryData = null; 
@@ -871,33 +951,60 @@ var isEditMode = false;
 
 function selectEntry(entryId) {
   var numEntryId = Number(entryId);
-  selectedEntryData = null; 
-  for (var i = 0; i < allEntries.length; i++) { if (allEntries[i].id == numEntryId) { selectedEntryData = allEntries[i]; break; } }
-  if (!selectedEntryData) return; 
-  selectedEntryId = numEntryId; 
+  selectedEntryData = null;
+  for (var i = 0; i < allEntries.length; i++) {
+    if (String(allEntries[i].id) === String(entryId) || Number(allEntries[i].id) === numEntryId) {
+      selectedEntryData = allEntries[i];
+      break;
+    }
+  }
+  if (!selectedEntryData) return;
+
+  selectedEntryId = numEntryId;
   isEditMode = false;
-  dashboardElement('detailEmpty').style.display = 'none';
-  dashboardElement('detailContent').style.display = 'flex';
-  dashboardElement('userDetailContent').style.display = 'none';
+
+  var detailEmpty = dashboardElement('detailEmpty');
+  var detailContent = dashboardElement('detailContent');
+  var userDetailContent = dashboardElement('userDetailContent');
+  if (detailEmpty) detailEmpty.style.display = 'none';
+  if (detailContent) detailContent.style.display = 'flex';
+  if (userDetailContent) userDetailContent.style.display = 'none';
+
   setViewMode();
-  dashboardElement('detailAuthorNameView').textContent = selectedEntryData.authorName || '-';
-  dashboardElement('detailPhonesView').textContent = selectedEntryData.phones || '-';
-  dashboardElement('detailEmailView').textContent = selectedEntryData.email || '';
-  dashboardElement('detailBookView').textContent = selectedEntryData.book || '-';
-  dashboardElement('detailISBNView').textContent = selectedEntryData.isbn || '-';
-  dashboardElement('detailAddressView').textContent = selectedEntryData.address || '-';
-  dashboardElement('detailAuthorNameEdit').value = selectedEntryData.authorName || '';
-  dashboardElement('detailPhonesEdit').value = selectedEntryData.phones || '';
-  dashboardElement('detailEmailEdit').value = selectedEntryData.email || '';
-  dashboardElement('detailBookEdit').value = selectedEntryData.book || '';
-  dashboardElement('detailISBNEdit').value = selectedEntryData.isbn || '';
-  dashboardElement('detailAddressEdit').value = selectedEntryData.address || '';
-  dashboardElement('detailStatusSelect').value = selectedEntryData.status || '';
-  updateStatusBadge(selectedEntryData.status);
-  showingAllActivity = false; 
-  dashboardElement('toggleActivityBtn').textContent = 'Show All Activity';
+  var viewFields = [
+    ['detailAuthorNameView', 'authorName'],
+    ['detailPhonesView', 'phones'],
+    ['detailEmailView', 'email'],
+    ['detailBookView', 'book'],
+    ['detailISBNView', 'isbn'],
+    ['detailAddressView', 'address']
+  ];
+  viewFields.forEach(function(pair) {
+    var viewId = pair[0];
+    var key = pair[1];
+    var value = getObjectValue(selectedEntryData, key) || '-';
+    if (viewId === 'detailEmailView') value = getObjectValue(selectedEntryData, key) || '';
+    var viewElement = dashboardElement(viewId);
+    if (viewElement) viewElement.textContent = value;
+
+    var editId = viewId.replace('View', 'Edit');
+    var editElement = dashboardElement(editId);
+    if (editElement) editElement.value = getObjectValue(selectedEntryData, key) || '';
+  });
+
+  var statusSelect = dashboardElement('detailStatusSelect');
+  if (statusSelect) statusSelect.value = getObjectValue(selectedEntryData, 'status') || '';
+  updateStatusBadge(getObjectValue(selectedEntryData, 'status'));
+  updateStatusDropdownPermissions(selectedEntryData);
+  updateExtendButton(selectedEntryData);
+  updateWrongNumberButton(selectedEntryData);
+  updateTransferPendingPermissions(selectedEntryData);
+  showingAllActivity = false;
+  var toggleButton = dashboardElement('toggleActivityBtn');
+  if (toggleButton) toggleButton.textContent = 'Show All Activity';
   loadRemarksOnly();
-  dashboardElement('remarkInput').value = '';
+  var remarkInput = dashboardElement('remarkInput');
+  if (remarkInput) remarkInput.value = '';
 }
 
 function setViewMode() { 
@@ -909,14 +1016,71 @@ function setViewMode() {
   isEditMode = false; 
 }
 
-function toggleEditMode() { 
+// function toggleEditMode() { 
+//   dashboardElement('editBtn').style.display = 'none';
+//   dashboardElement('saveEditBtn').style.display = 'inline-block';
+//   dashboardElement('cancelEditBtn').style.display = 'inline-block';
+//   ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){dashboardElement(id).style.display='none';});
+//   ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){dashboardElement(id).style.display='block';});
+//   isEditMode = true; 
+// }
+
+function toggleEditMode() {
+
+  // Do not allow editing while transfer is pending
+  if (
+    selectedEntryData &&
+    selectedEntryData.transferPending === true
+  ) {
+    showToast(
+      'This lead is pending transfer approval and cannot be edited.',
+      'warning'
+    );
+    return;
+  }
+
+  // Sold leads cannot be edited
+  if (
+    selectedEntryData &&
+    String(selectedEntryData.status || '').trim() === 'Sold'
+  ) {
+    showToast(
+      'Sold leads cannot be edited.',
+      'warning'
+    );
+    return;
+  }
+
   dashboardElement('editBtn').style.display = 'none';
   dashboardElement('saveEditBtn').style.display = 'inline-block';
   dashboardElement('cancelEditBtn').style.display = 'inline-block';
-  ['detailAuthorNameView','detailPhonesView','detailEmailView','detailBookView','detailISBNView','detailAddressView'].forEach(function(id){dashboardElement(id).style.display='none';});
-  ['detailAuthorNameEdit','detailPhonesEdit','detailEmailEdit','detailBookEdit','detailISBNEdit','detailAddressEdit'].forEach(function(id){dashboardElement(id).style.display='block';});
-  isEditMode = true; 
+
+  [
+    'detailAuthorNameView',
+    'detailPhonesView',
+    'detailEmailView',
+    'detailBookView',
+    'detailISBNView',
+    'detailAddressView'
+  ].forEach(function(id) {
+    dashboardElement(id).style.display = 'none';
+  });
+
+  [
+    'detailAuthorNameEdit',
+    'detailPhonesEdit',
+    'detailEmailEdit',
+    'detailBookEdit',
+    'detailISBNEdit',
+    'detailAddressEdit'
+  ].forEach(function(id) {
+    dashboardElement(id).style.display = 'block';
+  });
+
+  isEditMode = true;
 }
+
+
 
 function cancelEdit() { setViewMode(); }
 
@@ -945,11 +1109,33 @@ function deleteCurrentEntry() {
 }
 
 function changeEntryStatus() { 
+  var statusSelect = dashboardElement('detailStatusSelect');
+  if (!selectedEntryId || !statusSelect) return;
+  var newStatus = statusSelect.value;
   google.script.run.withSuccessHandler(function(r) { 
-    if (r.success) { updateStatusBadge(dashboardElement('detailStatusSelect').value); showToast('Updated!', 'success'); loadEntries(); }
-  }).updateEntryStatus(SESSION_ID, selectedEntryId, dashboardElement('detailStatusSelect').value);
-}
+      if (r && r.success) { 
+        updateStatusBadge(newStatus); 
+        showToast('Status updated!', 'success');
+        loadEntries();
+      } else {
+        showToast( (r && r.message) ? r.message : 'Failed to update status.', 'error' ); } })
+    .withFailureHandler(function(error) {
+      console.error('changeEntryStatus error:', error);
+      showToast( 'Server error while updating status.', 'error' ); })
+    .updateEntryStatus( SESSION_ID, selectedEntryId, newStatus ); }
 
+function getStatusLabel(status) {
+  switch (status) {
+    case 'Pipe': return 'Pipe';
+    case 'Exclusive': return 'Exclusive';
+    case 'VM': return 'VM - Voicemail';
+    case 'DNC': return 'DNC - Do Not Call';
+    case 'Sold': return 'Sold';
+    case 'Pending': return 'Pending';
+    case '':
+    case null:
+    case undefined: return 'None';
+    default: return status; } }
 
 function updateStatusBadge(status) { 
   var b = dashboardElement('detailStatus');
@@ -1025,4 +1211,717 @@ document.addEventListener('DOMContentLoaded', function() {
     var el = document.getElementById(id); if (el) el.addEventListener('input', updateEntrySubmitButton); 
   });
 });
+
+document.addEventListener('input', function(event) {
+  if (event.target.matches('input.entryPhone')) {
+    handleUSPhoneInput(event.target);
+  }
+});
+
+
+
+// ========== Open Transfer Modal ==========//
+
+function closeTransferModal() { document.getElementById('transferLeadModal').style.display = 'none'; }
+
+function openTransferModal() {
+  if (!selectedEntryData) { showToast( 'Please select a lead first.', 'error' ); return; }
+  if (selectedEntryData.status === 'Sold') { showToast( 'Sold leads cannot be transferred.', 'error' ); return; }
+  document.getElementById('transferTarget').value = '';
+  document.getElementById('transferReason').value = '';
+  document.getElementById('transferError').style.display = 'none';
+  document.getElementById('transferLeadInfo').textContent = 'Author - ' + (selectedEntryData.authorName || 'Unnamed Lead');
+  document.getElementById('transferLeadModal').style.display = 'flex';
+  loadTransferTargets();
+}
+
+// ========== Open Transfer Modal ==========//
+
+function closeTransferModalAdmin() { document.getElementById('transferLeadModalAdmin').style.display = 'none'; }
+
+function openTransferModalAdmin() {
+  if (!selectedEntryData) { showToast( 'Please select a lead first.', 'error' ); return; }
+  if (selectedEntryData.status === 'Sold') { showToast( 'Sold leads cannot be transferred.', 'error' ); return; }
+  document.getElementById('transferTarget').value = '';
+  document.getElementById('transferReason').value = '';
+  document.getElementById('transferError').style.display = 'none';
+  document.getElementById('transferLeadInfo').textContent = 'Author - ' + (selectedEntryData.authorName || 'Unnamed Lead');
+  document.getElementById('transferLeadModalAdmin').style.display = 'flex';
+  loadTransferTargets();
+}
+
+// Load Transfer Target
+function loadTransferTargets() {
+  var select = document.getElementById('transferTarget');
+  if (!select) return;
+  select.innerHTML = '<option value="">Loading...</option>';
+  google.script.run
+    .withSuccessHandler(function(r) { console.log('getTransferTargets response:', r);
+      select.innerHTML = '<option value="">Select Admin or Sales Partner</option>';
+      if (!r || !r.success) { select.innerHTML = '<option value="">ERROR: ' + ((r && r.message) || 'Unknown error') + '</option>'; return; }
+      if (!r.targets || r.targets.length === 0) { select.innerHTML = '<option value="">No available users</option>'; return; }
+      r.targets.forEach(function(target) {
+        var option = document.createElement('option');
+        option.value = target.id;
+        option.textContent = target.name + ' (' + target.role + ')';
+        select.appendChild(option); }); })
+    .withFailureHandler(function(error) { console.error( 'getTransferTargets FAILED:', error );
+      select.innerHTML = '<option value="">ERROR: ' + (error.message || error.toString()) + '</option>'; })
+    .getTransferTargets(SESSION_ID); }
+
+   // Submit Transfer Request
+function submitTransferRequest() {
+
+  if (!selectedEntryId) {
+    showToast('No lead selected.', 'error');
+    return;
+  }
+
+  var targetSelect = document.getElementById('transferTarget');
+  var reasonInput = document.getElementById('transferReason');
+
+  if (!targetSelect) {
+    showToast('Transfer target field not found.', 'error');
+    return;
+  }
+
+  var targetAgentId = targetSelect.value;
+  var reason = reasonInput ? reasonInput.value.trim() : '';
+
+  if (!targetAgentId) {
+    showToast('Please select a transfer target.', 'error');
+    return;
+  }
+
+  var submitBtn = document.getElementById('submitTransferBtn');
+
+  if (submitBtn) {
+    if (submitBtn.disabled) return;
+
+    submitBtn.disabled = true;
+    submitBtn.style.opacity = '0.5';
+    submitBtn.textContent = 'Submitting...';
+  }
+
+  console.log('TRANSFER DEBUG:', {
+    sessionId: SESSION_ID,
+    entryId: selectedEntryId,
+    targetAgentId: targetAgentId,
+    reason: reason
+  });
+
+  google.script.run
+
+    .withSuccessHandler(function(response) {
+
+      console.log(
+        'CREATE TRANSFER RESPONSE:',
+        response
+      );
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+        submitBtn.textContent = 'Request Transfer';
+      }
+
+      if (response && response.success) {
+
+        showToast(
+          response.message ||
+          'Transfer request submitted for approval.',
+          'success'
+        );
+
+        var modal =
+          document.getElementById('transferLeadModalAdmin');
+
+        if (modal) {
+          modal.style.display = 'none';
+        }
+
+        if (targetSelect) {
+          targetSelect.value = '';
+        }
+
+        if (reasonInput) {
+          reasonInput.value = '';
+        }
+
+        loadRemarksOnly();
+
+      } else {
+
+        console.error(
+          'TRANSFER SERVER REJECTED:',
+          response
+        );
+
+        showToast(
+          'TRANSFER REJECTED: ' +
+          (
+            response && response.message
+              ? response.message
+              : 'No message returned by server.'
+          ),
+          'error'
+        );
+      }
+
+    })
+
+    .withFailureHandler(function(error) {
+
+      console.error(
+        'CREATE TRANSFER SERVER ERROR:',
+        error
+      );
+
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.style.opacity = '1';
+        submitBtn.textContent = 'Request Transfer';
+      }
+
+      showToast(
+        'SERVER ERROR: ' +
+        (
+          error && error.message
+            ? error.message
+            : String(error)
+        ),
+        'error'
+      );
+
+    })
+
+    .createTransferRequest(
+      SESSION_ID,
+      selectedEntryId,
+      targetAgentId,
+      reason
+    );
+}
+
+
+// ========== CONFIRM EXTEND GRACE PERIOD ==========
+function confirmExtendGracePeriod() {
+  if ( !selectedEntryId || !selectedEntryData ) { return; }
+  if ( selectedEntryData.transferPending === true ) { return; }
+  var confirmBtn = document.getElementById( 'confirmExtendBtn' );
+  var error = document.getElementById( 'extendGraceError' );
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.style.opacity = '0.6'; confirmBtn.style.cursor = 'not-allowed'; }
+  if (error) { error.style.display = 'none'; error.textContent = ''; }
+
+  google.script.run
+
+    .withSuccessHandler(function(result) {
+
+      if (confirmBtn) {
+
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.cursor = 'pointer';
+
+      }
+
+      if (!result || !result.success) {
+
+        if (error) {
+
+          error.textContent =
+            (result && result.message)
+              ? result.message
+              : 'Unable to extend the grace period.';
+
+          error.style.display =
+            'block';
+        }
+
+        return;
+      }
+
+      closeExtendModal();
+      showToast( 'Grace period successfully extended.', 'success' );
+
+      // Reload entries so frontend gets
+      // the updated StatusStartedAt state.
+      loadEntries(undefined, function() {
+        if (!selectedEntryId) { return; }
+        selectEntry( selectedEntryId );
+
+      });
+
+    })
+
+    .withFailureHandler(function(err) {
+      console.error( 'extendLeadGracePeriod failed:', err );
+
+      if (confirmBtn) { confirmBtn.disabled = false; confirmBtn.style.opacity = '1'; confirmBtn.style.cursor = 'pointer'; }
+      if (error) { error.textContent = 'Unable to extend the grace period. Please try again.'; error.style.display = 'block'; }
+
+    })
+
+    .extendLeadGracePeriod( SESSION_ID, selectedEntryId );
+}
+
+// ========== WRONG NUMBER ==========
+
+function openWrongNumberModal() {
+
+  if (!selectedEntryData) {
+    showToast('Please select an entry first.', 'warning');
+    return;
+  }
+
+  document.getElementById('wrongNumberLeadInfo').textContent =
+    (selectedEntryData.authorName || 'Unknown Author') +
+    ' — ' +
+    (selectedEntryData.book || 'Unknown Book');
+
+  document.getElementById('wrongNumberError').style.display = 'none';
+
+  document.getElementById('wrongNumberModal').style.display = 'flex';
+}
+
+function closeWrongNumberModal() {
+
+  document.getElementById('wrongNumberModal').style.display = 'none';
+
+  document.getElementById('wrongNumberError').style.display = 'none';
+}
+
+function confirmWrongNumber() {
+
+  if (!selectedEntryId) {
+    showToast('No entry selected.', 'error');
+    return;
+  }
+
+  var btn =
+    document.getElementById('confirmWrongNumberBtn');
+  var error = document.getElementById('wrongNumberError');
+  if (!btn || !error) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Processing...';
+
+  google.script.run
+
+    .withSuccessHandler(function(result) {
+
+      btn.disabled = false;
+      btn.textContent = 'Mark as Wrong Number';
+
+      if (!result || !result.success) {
+
+        error.textContent =
+          (result && result.message)
+            ? result.message
+            : 'Unable to mark lead as Wrong Number.';
+
+        error.style.display = 'block';
+
+        return;
+      }
+
+      closeWrongNumberModal();
+
+      showToast( 'Lead marked as Wrong Number and returned for re-mining.', 'success' );
+
+      // Clear selected entry
+      selectedEntryData = null;
+      selectedEntryId = null;
+
+      var detailContent = dashboardElement('detailContent');
+      var detailEmpty = dashboardElement('detailEmpty');
+      if (detailContent) detailContent.style.display = 'none';
+      if (detailEmpty) detailEmpty.style.display = 'block';
+
+      // Refresh the table
+      loadEntries();
+
+    })
+
+    .withFailureHandler(function(error) {
+
+      console.error( 'confirmWrongNumber failed:', error );
+      btn.disabled = false;
+      btn.textContent = 'Mark as Wrong Number';
+
+      error.textContent =
+        'Unable to process the request. Please try again.';
+
+      error.style.display = 'block';
+    })
+
+    .markLeadWrongNumber( SESSION_ID, selectedEntryId );
+}
+
+function updateWrongNumberButton(entry) {
+
+  var btn =
+    document.getElementById('wrongNumberBtn');
+
+  if (!btn) { return; }
+
+  // Hidden by default
+  btn.style.display = 'none';
+
+  if (!entry) { return; }
+
+  // Already MWN
+  if ( entry.status === 'Wrong Number' || entry.originalStatus === 'Wrong Number' ) { return; }
+
+  // Only leads mined by LGS can use MWN
+  if ( entry.minedByRole === 'Lead Gen Specialist' ) { btn.style.display = 'inline-block'; }
+}
+
+
+// ========== OPEN EXTEND MODAL ==========
+function openExtendModal() {
+  if (!selectedEntryData) { return; }
+
+  // Safety check
+  if ( selectedEntryData.transferPending === true ) { return; }
+
+  var status =
+    selectedEntryData.originalStatus !== undefined
+      ? selectedEntryData.originalStatus
+      : selectedEntryData.status;
+
+  var allowedStatuses = [ '', 'Pipe', 'VM' ];
+
+  if ( allowedStatuses.indexOf(status) === -1 ) { return; }
+  var modal = document.getElementById( 'extendGraceModal' );
+  var leadInfo = document.getElementById( 'extendGraceLeadInfo' );
+  var error = document.getElementById( 'extendGraceError' );
+  if (error) { error.style.display = 'none'; error.textContent = ''; }
+
+  if (leadInfo) {
+
+    var statusLabel =
+      status === ''
+        ? 'No Status'
+        : status;
+
+    leadInfo.innerHTML =
+      '<strong>' +
+      escapeHtml(
+        selectedEntryData.authorName || '-'
+      ) +
+      '</strong><br>' +
+
+      '<span style="color:#888;">' +
+      escapeHtml(
+        selectedEntryData.book || '-'
+      ) +
+      '</span><br><br>' +
+
+      'Current Status: <strong>' +
+      escapeHtml(statusLabel) +
+      '</strong>';
+  }
+
+  if (modal) { modal.style.display = 'flex'; }
+}
+
+
+// ========== CLOSE EXTEND MODAL ==========
+function closeExtendModal() {
+  var modal = document.getElementById( 'extendGraceModal' );
+  if (modal) { modal.style.display = 'none'; }
+  var error = document.getElementById( 'extendGraceError' );
+  if (error) { error.style.display = 'none'; error.textContent = ''; }
+}
+
+
+// ========== EXTEND BUTTON VISIBILITY ==========
+
+function updateExtendButton(entry) {
+  var extendBtn =
+    document.getElementById('extendBtn');
+  if (!extendBtn || !entry) { return; }
+  var status =
+    entry.originalStatus !== undefined
+      ? entry.originalStatus
+      : entry.status;
+
+  // ==========================================
+  // ONLY ALLOW:
+  //
+  // No Status
+  // Pipe
+  // VM
+  // ==========================================
+
+  var canExtend =
+    status === '' ||
+    status === 'Pipe' ||
+    status === 'VM';
+
+  // ==========================================
+  // DO NOT ALLOW WHILE TRANSFER IS PENDING
+  // ==========================================
+
+  if (entry.transferPending === true) { canExtend = false; }
+  if (canExtend) {
+    extendBtn.style.display = 'inline-block';
+    extendBtn.disabled = false;
+    extendBtn.style.opacity = '1';
+    extendBtn.style.cursor = 'pointer';
+  } else {
+    extendBtn.style.display = 'none';
+    extendBtn.disabled = true;
+    extendBtn.style.opacity = '0.5';
+    extendBtn.style.cursor = 'not-allowed';
+  }
+}
+
+
+
+// ========== STATUS DROPDOWN PERMISSIONS ==========
+function updateStatusDropdownPermissions(entry) {
+  var select = dashboardElement('detailStatusSelect');
+  if (!select || !entry) return;
+  select.disabled = false;
+  for (var i = 0; i < select.options.length; i++) { select.options[i].disabled = false; }
+  if (entry.transferPending === true) { select.disabled = true; return; }
+  if (!currentUser) return;
+  if ( String(entry.status || '').trim() === 'Sold' ) { select.disabled = true; return; }
+  var minedById = entry.minedById ? String(entry.minedById).trim() : '';
+  var currentUserId = currentUser.id ? String(currentUser.id).trim() : '';
+  var isOwnLead = minedById !== '' && currentUserId !== '' && minedById === currentUserId;
+  var currentStatus = entry.status ? String(entry.status).trim() : '';
+  var noStatusOption = select.querySelector( 'option[value=""]' );
+  var exclusiveOption = select.querySelector( 'option[value="Exclusive"]' );
+  if (normalizeRole(currentUser.role) === 'superadmin') { return; }
+  if (currentUser.role === 'Admin') { if (isOwnLead) { if (noStatusOption) { noStatusOption.disabled = true; } } return; }
+  if (currentUser.role === 'Sales Partner') {
+    if (isOwnLead) { if (noStatusOption) { noStatusOption.disabled = true; } return; }
+    if (noStatusOption) { if (currentStatus !== '') { noStatusOption.disabled = true; } }
+    if (exclusiveOption) { exclusiveOption.disabled = true; } return; } return; 
+  }
+
+  // ========== TRANSFER PENDING PERMISSIONS ==========
+function updateTransferPendingPermissions(entry) {
+
+  if (!entry) return;
+
+  var transferBtn = dashboardElement('transferBtn');
+  var editBtn = dashboardElement('editBtn');
+  var wrongNumberBtn = dashboardElement('wrongNumberBtn');
+  var saveEditBtn = dashboardElement('saveEditBtn');
+  var cancelEditBtn = dashboardElement('cancelEditBtn');
+  var statusSelect = dashboardElement('detailStatusSelect');
+
+  var isPending = entry.transferPending === true;
+
+  if (isPending) {
+
+    // Transfer button
+    if (transferBtn) {
+      transferBtn.disabled = true;
+      transferBtn.style.opacity = '0.5';
+      transferBtn.style.cursor = 'not-allowed';
+    }
+
+    // Edit button
+    if (editBtn) {
+      editBtn.disabled = true;
+      editBtn.style.opacity = '0.5';
+      editBtn.style.cursor = 'not-allowed';
+    }
+
+    // wrongNumberBtn button
+    if (wrongNumberBtn) {
+      wrongNumberBtn.disabled = true;
+      wrongNumberBtn.style.opacity = '0.5';
+      wrongNumberBtn.style.cursor = 'not-allowed';
+    }
+
+    // Status dropdown
+    if (statusSelect) {
+      statusSelect.disabled = true;
+    }
+
+    // If somehow already in edit mode, force view mode
+    if (
+      typeof isEditMode !== 'undefined' &&
+      isEditMode === true
+    ) {
+      if (typeof setViewMode === 'function') {
+        setViewMode();
+      }
+    }
+
+    return;
+  }
+
+  if (transferBtn) {
+    transferBtn.disabled = false;
+    transferBtn.style.opacity = '1';
+    transferBtn.style.cursor = 'pointer';
+  }
+
+  if (editBtn) {
+    editBtn.disabled = false;
+    editBtn.style.opacity = '1';
+    editBtn.style.cursor = 'pointer';
+  }
+
+  if (wrongNumberBtn) {
+    wrongNumberBtn.disabled = false;
+    wrongNumberBtn.style.opacity = '1';
+    wrongNumberBtn.style.cursor = 'pointer';
+  }
+
+  // Re-apply normal status permissions
+  updateStatusDropdownPermissions(entry);
+}
+
+
+// ==========PHONE FORMATTER ==========
+function formatUSPhoneNumber(value) {
+  var digits = value.replace(/\D/g, '');
+  if ( digits.length === 11 && digits.charAt(0) === '1' ) {
+    digits = digits.substring(1); } 
+  digits = digits.substring(0, 10);
+  if (digits.length <= 3) { return digits;
+  } else if (digits.length <= 6) {
+    return '(' + digits.substring(0, 3) + ') ' + digits.substring(3);
+  } else {
+    return '(' + digits.substring(0, 3) + ') ' + digits.substring(3, 6) + '-' + digits.substring(6); }
+}
+
+function handleUSPhoneInput(input) {
+  var oldValue = input.value;
+  var formatted = formatUSPhoneNumber(oldValue);
+  input.value = formatted;
+  saveEntryDraft();
+  input.setSelectionRange( formatted.length, formatted.length );
+}
+
+function handleEditPhoneInput(input) {
+  var formatted = formatUSPhoneNumber(input.value);
+
+  input.value = formatted;
+
+  input.setSelectionRange(
+    formatted.length,
+    formatted.length
+  );
+}
+
+function addPhoneField() {
+  var c = document.getElementById('phoneNumbersContainer');
+  var d = document.createElement('div');
+  d.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;';
+  d.innerHTML = '<input type="text" class="entryPhone" ' + 'placeholder="+1 234 567 8900" ' + 'style="flex:1;padding:11px;border:1.5px solid #e0e0e0;border-radius:8px;font-size:14px;">' +
+    '<button type="button" ' + 'onclick="removePhoneField(this)" ' + 'style="background:#fee;color:#d32f2f;border:1px solid #fcc;border-radius:6px;cursor:pointer;font-size:12px;padding:0 10px;">' + 'Remove</button>';
+  c.appendChild(d);
+  updateRemoveButtons();
+  saveEntryDraft();
+}
+
+function removePhoneField(b) { 
+  var c = document.getElementById('phoneNumbersContainer'); 
+  if (c.children.length > 1) { b.parentElement.remove(); updateRemoveButtons(); } 
+}
+
+function updateRemoveButtons() { 
+  var rb = document.getElementById('phoneNumbersContainer').querySelectorAll('button'); 
+  if (rb.length <= 1) rb.forEach(function(b) { b.style.display = 'none'; }); 
+  else rb.forEach(function(b) { b.style.display = 'inline-block'; }); 
+}
+
+function updateEntrySubmitButton() { 
+  var an = document.getElementById('entryAuthorName').value.trim(), 
+      bk = document.getElementById('entryBook').value.trim(), 
+      is = document.getElementById('entryISBN').value.trim(); 
+  var b = document.getElementById('entrySubmitBtn'); 
+  b.disabled = !(an && bk && is); 
+  b.style.opacity = b.disabled ? '0.5' : '1'; 
+}
+
+function submitEntry(e) { 
+  e.preventDefault(); 
+  if (isSubmitting) return; 
+  isSubmitting = true; 
+  var an = document.getElementById('entryAuthorName').value.trim(), 
+      bk = document.getElementById('entryBook').value.trim(), 
+      is = document.getElementById('entryISBN').value.trim(), 
+      em = document.getElementById('entryEmail').value.trim(), 
+      ad = document.getElementById('entryAddress').value.trim(); 
+  var pi = document.querySelectorAll('.entryPhone'), ph = []; 
+  pi.forEach(function(i) { var v = i.value.trim(); if (v) ph.push(v); }); 
+  var er = document.getElementById('entryError'); 
+  er.style.display = 'none'; 
+  if (!an || !bk || !is) { er.textContent = 'Author Name, Book, and ISBN are required.'; er.style.display = 'block'; isSubmitting = false; return; } 
+
+  google.script.run 
+  .withSuccessHandler(function(r) { 
+    isSubmitting = false;
+
+    if (r && r.success) { 
+      clearEntryDraft();
+
+  showToast( 'Entry saved!', 'success' );
+
+  document.getElementById('addEntryModal').style.display = 'none';
+
+  loadEntries();
+    } else {
+      er.textContent = (r && r.message) || 'Unable to save entry.';
+      er.style.display = 'block'; } })
+  .withFailureHandler(function(error) { isSubmitting = false;
+    er.textContent = 'Unable to save entry. Please try again.';
+    er.style.display = 'block';
+    handleServerError(error, 'addEntry'); })
+  .addEntry(SESSION_ID, { authorName: an, phones: ph.join(', '), email: em, book: bk, isbn: is, address: ad }); 
+}
+
+
+var sessionCheckInterval = null;
+
+function startSessionMonitoring() {
+  if (sessionCheckInterval) { clearInterval(sessionCheckInterval); }
+  sessionCheckInterval = setInterval(function() {
+    if (!SESSION_ID) return;
+    google.script.run .withSuccessHandler(function(result) {
+        if (!result || !result.success) { handleSessionExpired(); } })
+      .withFailureHandler(function() { })
+      .validateSession(SESSION_ID); }, 60000);
+}
+
+function stopSessionMonitoring() {
+  if (sessionCheckInterval) { clearInterval(sessionCheckInterval); sessionCheckInterval = null; }
+}
+
+function handleSessionExpired() {
+  stopSessionMonitoring();
+  SESSION_ID = null;
+  currentUser = null;
+  sessionStorage.removeItem('crm_session');
+  var activeScreen = document.getElementById(activeDashboardId);
+  if (activeScreen) activeScreen.style.display = 'none';
+  var loginScreen = document.getElementById('loginScreen');
+  if (loginScreen) loginScreen.style.display = 'flex';
+  var error = document.getElementById('loginError');
+  if (error) {
+    error.textContent = 'Your session has expired. Please log in again during your next available shift.';
+    error.style.display = 'block'; }
+  var username = document.getElementById('email') || document.getElementById('username');
+  var password = document.getElementById('password');
+  if (username) username.value = '';
+  if (password) password.value = '';
+}
+
+// ========== APPS SCRIPT ERROR HANDLER ==========
+function handleServerError(error, context) {
+  console.error( 'Apps Script error [' + (context || 'Unknown') + ']:', error );
+  var message = 'Something went wrong. Please try again.';
+  if (error && error.message) { message = error.message; } showToast(message, 'error');
+}
+
 </script>
