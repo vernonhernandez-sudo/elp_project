@@ -104,7 +104,8 @@
 
 <div class="glass-panel" style="padding:12px 28px;display:flex;align-items:center;gap:16px;flex-shrink:0;margin:0 28px;">
   <div id="avatar" style="width:42px;height:42px;background:#800000;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:600;font-size:15px;">--</div>
-  <div style="flex:1;"><div><div style="display: flex; align-items: center; gap:15px;"><div id="userName" style="font-size:14px;font-weight:700;color:#1a1a1a;">Loading...</div><div style="display:flex; align-items: center; gap:0px; color:#000; font-weight:700;">(<div id="userRole" style="font-size:14px;"></div>)</div></div></div><div id="userEmail" style="font-size:11px;color:#777;"></div></div>
+  <div style="flex:1;"><div><div style="display: flex; align-items: center; gap:15px;"><div id="userName" style="font-size:14px;font-weight:700;color:#1a1a1a;">Loading...</div><div style="display:flex; align-items: center; gap:0px; color:#000; font-weight:700;">(<div id="userRole" style="font-size:14px;"></div>) </div> <div id="userPosition" style="font-size:14px;"></div></div></div><div id="userEmail" style="font-size:11px;color:#777;"></div></div>
+  
   <div style="display:flex;gap:8px;">
     <div class="glass-card" style="padding:8px 14px;text-align:center;min-width:60px;"><div id="totalCount" style="font-size:20px;font-weight:700;color:#800000;">0</div><div style="font-size:9px;color:#888;">Total</div></div>
     <div id="pipeCard" onclick="filterByStatus('Pipe')" class="glass-card" style="padding:8px 14px;text-align:center;cursor:pointer;min-width:60px;"><div id="pipeCount" style="font-size:20px;font-weight:700;color:#e67e22;">0</div><div style="font-size:9px;color:#888;">Pipe</div></div>
@@ -191,7 +192,7 @@
 
         </div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">AUTHOR</label><div id="detailAuthorNameView" style="font-size:13px;color:#3d3223;font-weight:500;"></div><input type="text" id="detailAuthorNameEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
-        <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">PHONE</label><div id="detailPhonesView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailPhonesEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+        <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">PHONE</label><div id="detailPhonesView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailPhonesEdit" oninput="handleEditPhoneInput(this)" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">EMAIL</label><div id="detailEmailView" style="font-size:13px;color:#3d3223;"></div><input type="email" id="detailEmailEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">BOOK</label><div id="detailBookView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailBookEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">ISBN</label><div id="detailISBNView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailISBNEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
@@ -208,6 +209,7 @@
         </div>
       </div>
     </div>
+    
     <div id="userDetailContent" style="display:none;flex-direction:column;flex:1;">
       <div style="padding:14px 18px;border-bottom:1px solid rgba(232,220,200,0.4);display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:13px;font-weight:600;color:#5d4e37;">User Details</div>

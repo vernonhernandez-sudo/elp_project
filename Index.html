@@ -15,14 +15,16 @@
     #loginScreen,
     #mainScreen,
     #adminScreen,
-    #superScreen {
+    #superScreen,
+    #leadgenScreen {
       width: 100vw;
       height: 100vh;
     }
 
     #mainScreen,
     #adminScreen,
-    #superScreen {
+    #superScreen,
+    #leadgenScreen {
       display: none;
     }
   </style>
@@ -48,6 +50,11 @@
   <!-- SUPERADMIN -->
   <div id="superScreen">
     <?!= include('Superadmin'); ?>
+  </div>
+
+  <!-- LEAD GEN SPECIALIST -->
+  <div id="leadgenScreen">
+    <?!= include('Leadgen'); ?>
   </div>
 
   <!-- JAVASCRIPT -->

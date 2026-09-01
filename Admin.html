@@ -152,7 +152,7 @@
   
   <div class="glass-detail" style="flex:1;padding:0;overflow-y:auto;display:flex;flex-direction:column;">
     <div id="detailEmpty" style="padding:24px;text-align:center;margin-top:80px;"><div style="color:#bbb;font-size:13px;">Select an entry to view details</div></div>
-    <div id="detailContent" style="display:none;flex-direction:column;flex:1;">
+ <div id="detailContent" style="display:none;flex-direction:column;flex:1;">
       <div style="padding:14px 18px;border-bottom:1px solid rgba(232,220,200,0.4);display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:13px;font-weight:600;color:#5d4e37;">Entry Details</div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -160,18 +160,55 @@
           <button onclick="saveEntryEdits()" id="saveEditBtn" style="padding:5px 12px;background:#800000;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;display:none;">Save</button>
           <button onclick="cancelEdit()" id="cancelEditBtn" style="padding:5px 12px;background:#888;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;display:none;">Cancel</button>
           <button onclick="deleteCurrentEntry()" style="padding:5px 12px;background:#d32f2f;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">Delete</button>
+          <button
+            onclick="openExtendModal()"
+            id="extendBtn"
+            style="
+              display:none;
+              padding:5px 12px;
+              background:#00796b;
+              color:white;
+              border:none;
+              border-radius:4px;
+              cursor:pointer;
+              font-size:11px;
+            "
+          >
+            Extend
+          </button>
+          <button
+            onclick="openTransferModalAdmin()"
+            id="transferBtn"
+            style="padding:5px 12px;background:#3c19ff;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+            Transfer
+          </button>
+          <button
+            onclick="openWrongNumberModal()"
+            id="wrongNumberBtn"
+            style="display:none;padding:5px 12px;background:#d35400;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;">
+            MWN
+          </button>
           <span id="detailStatus" style="padding:3px 10px;border-radius:10px;font-size:10px;font-weight:600;"></span>
         </div>
       </div>
       <div style="padding:18px;overflow-y:auto;flex:1;">
         <div style="margin-bottom:14px;">
           <label style="display:block;margin-bottom:4px;font-size:10px;font-weight:600;color:#8b7355;">STATUS</label>
-          <select id="detailStatusSelect" onchange="changeEntryStatus()" style="width:100%;padding:9px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;">
-            <option value="">- No Status -</option><option value="Pipe">Pipe</option><option value="Pending">Pending</option><option value="VM">VM - Voicemail</option><option value="Sold">Sold</option><option value="DNC">DNC</option><option value="Exclusive">Exclusive</option><option value="Delete">Delete</option>
+          <select
+            id="detailStatusSelect"
+            onchange="changeEntryStatus()"
+            style="width:100%;padding:9px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;"
+          >
+            <option value="">- No Status -</option>
+            <option value="Pipe">Pipe</option>
+            <option value="VM">VM</option>
+            <option value="DNC">DNC</option>
+            <option value="Exclusive">Exclusive</option>
+            <option value="Sold">Sold</option>
           </select>
         </div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">AUTHOR</label><div id="detailAuthorNameView" style="font-size:13px;color:#3d3223;font-weight:500;"></div><input type="text" id="detailAuthorNameEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
-        <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">PHONE</label><div id="detailPhonesView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailPhonesEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
+        <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">PHONE</label><div id="detailPhonesView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailPhonesEdit" oninput="handleEditPhoneInput(this)" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;" ></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">EMAIL</label><div id="detailEmailView" style="font-size:13px;color:#3d3223;"></div><input type="email" id="detailEmailEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">BOOK</label><div id="detailBookView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailBookEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
         <div style="margin-bottom:12px;"><label style="font-size:10px;font-weight:600;color:#8b7355;">ISBN</label><div id="detailISBNView" style="font-size:13px;color:#3d3223;"></div><input type="text" id="detailISBNEdit" style="display:none;width:100%;padding:8px;border:1.5px solid #d4c5a9;border-radius:8px;font-size:13px;box-sizing:border-box;"></div>
@@ -188,6 +225,8 @@
         </div>
       </div>
     </div>
+
+
     <div id="userDetailContent" style="display:none;flex-direction:column;flex:1;">
       <div style="padding:14px 18px;border-bottom:1px solid rgba(232,220,200,0.4);display:flex;justify-content:space-between;align-items:center;">
         <div style="font-size:13px;font-weight:600;color:#5d4e37;">User Details</div>
@@ -213,7 +252,7 @@
 
 
 <div id="toast" class="toast"></div>
-<div id="transferReviewModal" class="confirm-overlay"><div class="confirm-box" style="width:420px;max-width:90vw;text-align:left;"><h3>Review Transfer Request</h3><p style="margin:0 0 16px;color:#555;font-size:13px;">From: <strong id="transferReviewAgent"></strong></p><form onsubmit="submitTransferReview(event)"><label style="display:block;margin-bottom:12px;font-size:12px;color:#555;">Decision<select id="transferReviewDecision" style="width:100%;margin-top:5px;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;"><option value="Approve">Approve</option><option value="Disapprove">Disapprove</option></select></label><label style="display:block;margin-bottom:16px;font-size:12px;color:#555;">Note<textarea id="transferReviewNote" rows="4" placeholder="Add a review note" style="width:100%;margin-top:5px;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea></label><div class="btn-row"><button type="button" class="btn-cancel" onclick="closeTransferReviewModal()">Cancel</button><button type="submit" class="btn-confirm" style="background:#800000;">Save Review</button></div></form></div></div>
+<div id="transferReviewModal" class="confirm-overlay"><div class="confirm-box" style="width:420px;max-width:90vw;text-align:left;"><h3>Review Transfer Request</h3><p style="margin:0 0 16px;color:#555;font-size:13px;">From: <strong id="transferReviewAgent"></strong></p><form onsubmit="submitTransferReview(event)"><label style="display:block;margin-bottom:12px;font-size:12px;color:#555;">Decision<select id="transferReviewDecision" style="width:100%;margin-top:5px;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;"><option value="Approve">Approve</option><option value="Disapprove">Disapprove</option></select></label><label style="display:block;margin-bottom:16px;font-size:12px;color:#555;">Note<textarea id="transferReviewNote" rows="4" placeholder="Add a review note" style="width:100%;margin-top:5px;padding:9px;border:1px solid #ddd;border-radius:8px;font-size:13px;box-sizing:border-box;resize:vertical;"></textarea></label><div class="btn-row"><button type="button" class="btn-cancel" onclick="closeTransferReviewModal()">Cancel</button><button type="submit" class="btn-confirm" style="background:#800000;">Submit</button></div></form></div></div>
 <div class="confirm-overlay" id="confirmOverlay"><div class="confirm-box"><h3 id="confirmTitle">Confirm</h3><p id="confirmMessage">Are you sure?</p><div class="btn-row"><button class="btn-cancel" onclick="closeConfirm(false)">Cancel</button><button class="btn-confirm" id="confirmBtn">Confirm</button></div></div></div>
 
 <div id="addEntryModal" class="confirm-overlay"><div class="confirm-box" style="width:480px;max-width:90vw;max-height:90vh;overflow-y:auto;text-align:left;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;"><h3 style="color:#800000;margin:0;">New Entry</h3><button onclick="closeEntryModal()" style="background:none;border:none;font-size:22px;color:#999;cursor:pointer;">&times;</button></div><form onsubmit="submitEntry(event)">
@@ -239,6 +278,195 @@
       <div id="userError" style="display:none;color:#d32f2f;font-size:13px;margin-bottom:12px;padding:10px;background:#ffebee;border-radius:8px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;padding-top:14px;border-top:1px solid #eee;"><button type="button" onclick="closeUserModal()" style="padding:10px 22px;background:#f0f0f0;border:none;border-radius:8px;cursor:pointer;font-size:13px;">Cancel</button><button type="submit" style="padding:10px 22px;background:#145ee9;color:white;border:none;border-radius:8px;cursor:pointer;font-size:13px;">Save User</button></div>
     </form></div></div>
+
+    <!-- ========== TRANSFER LEAD MODAL ========== -->
+<div id="transferLeadModalAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;flex-direction:column;" >
+  <div style="width:420px;max-width:90%;background:white;border-radius:12px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.2);" >
+
+    <!-- Header -->
+<div style=" position:relative; text-align:center; margin-bottom:18px; " >
+  <div style=" font-size:17px; font-weight:700; color:#3d3223; " > Transfer Lead </div>
+  <div style=" font-size:11px; color:#999; margin-top:3px; " > Request approval to transfer this lead </div>
+  <button type="button" onclick="closeTransferModalAdmin()" style=" position:absolute; top:-3px; right:0; border:none; background:none; font-size:20px; color:#888; cursor:pointer; padding:0; line-height:1; " > &times; </button>
+</div>
+
+    <!-- Entry Information -->
+    <div style=" background:#f7f5f0; border-radius:8px; padding:12px; margin-bottom:16px; " >
+      <div style=" font-size:10px; color:#999; margin-bottom:3px; " > LEAD </div>
+      <div id="transferLeadInfo" style=" font-size:13px; font-weight:600; color:#3d3223; " > - </div>
+    </div>
+
+    <!-- Transfer To -->
+    <div style="margin-bottom:14px;">
+      <label for="transferTarget" style=" display:block; font-size:11px; font-weight:600; color:#5d4e37; margin-bottom:6px; " > Transfer To </label>
+      <select id="transferTarget" style=" width:100%; padding:10px; border:1.5px solid #e0e0e0; border-radius:8px; font-size:13px; box-sizing:border-box; background:white; " > <option value=""> Select BM, ABM or Sales Partner </option> </select>
+    </div>
+
+    <!-- Reason -->
+    <div style="margin-bottom:16px;">
+      <label for="transferReason" style=" display:block; font-size:11px; font-weight:600; color:#5d4e37; margin-bottom:6px; " > Reason for Transfer </label>
+      <textarea id="transferReason" placeholder="Enter the reason for transferring this lead..." rows="4" style=" width:100%; padding:10px; border:1.5px solid #e0e0e0; border-radius:8px; font-size:13px; resize:vertical; box-sizing:border-box; font-family:inherit; " ></textarea>
+    </div>
+
+    <!-- Error -->
+    <div id="transferError" style=" display:none; background:#fff3f3; color:#c62828; border:1px solid #f1c4c4; border-radius:7px; padding:9px; font-size:11px; margin-bottom:12px; " ></div>
+
+    <!-- Buttons -->
+    <div style=" display:flex; justify-content:flex-end; gap:8px; " >
+      <button type="button" onclick="closeTransferModalAdmin()" style=" padding:9px 16px; background:#888; color:white; border:none; border-radius:7px; cursor:pointer; font-size:12px; " > Cancel </button>
+      <button type="button" id="submitTransferBtn" onclick="submitTransferRequest()" style=" padding:9px 16px; background:#3c19ff; color:white; border:none; border-radius:7px; cursor:pointer; font-size:12px; " > Request Transfer </button>
+    </div>
+    </div>
+</div>
+
+    <!-- ========== EXTEND GRACE PERIOD MODAL ========== -->
+<div
+  id="extendGraceModal"
+  style="
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.45);
+    z-index:10000;
+    align-items:center;
+    justify-content:center;
+  "
+>
+
+  <div
+    style="
+      width:390px;
+      max-width:90%;
+      background:white;
+      border-radius:12px;
+      padding:24px;
+      box-shadow:0 10px 30px rgba(0,0,0,0.2);
+    "
+  >
+
+    <div
+      style="
+        text-align:center;
+        margin-bottom:18px;
+      "
+    >
+
+      <div
+        style="
+          font-size:17px;
+          font-weight:700;
+          color:#3d3223;
+        "
+      >
+        Extend Grace Period?
+      </div>
+
+      <div
+        style="
+          font-size:11px;
+          color:#999;
+          margin-top:5px;
+          line-height:1.5;
+        "
+      >
+        This will reset the grace-period countdown for this lead.
+      </div>
+
+    </div>
+
+    <div
+      id="extendGraceLeadInfo"
+      style="
+        background:#f7f5f0;
+        border-radius:8px;
+        padding:12px;
+        margin-bottom:18px;
+        font-size:12px;
+        color:#5d4e37;
+      "
+    >
+      -
+    </div>
+
+    <div
+      id="extendGraceError"
+      style="
+        display:none;
+        background:#fff3f3;
+        color:#c62828;
+        border:1px solid #f1c4c4;
+        border-radius:7px;
+        padding:9px;
+        font-size:11px;
+        margin-bottom:12px;
+      "
+    >
+    </div>
+
+    <div
+      style="
+        display:flex;
+        justify-content:flex-end;
+        gap:8px;
+      "
+    >
+
+      <button
+        type="button"
+        onclick="closeExtendModal()"
+        style="
+          padding:9px 16px;
+          background:#888;
+          color:white;
+          border:none;
+          border-radius:7px;
+          cursor:pointer;
+          font-size:12px;
+        "
+      >
+        Cancel
+      </button>
+
+      <button
+        type="button"
+        id="confirmExtendBtn"
+        onclick="confirmExtendGracePeriod()"
+        style="
+          padding:9px 16px;
+          background:#00796b;
+          color:white;
+          border:none;
+          border-radius:7px;
+          cursor:pointer;
+          font-size:12px;
+        "
+      >
+        Extend
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+    <!-- ========== WRONG NUMBER MODAL ========== -->
+<div id="wrongNumberModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:10000;align-items:center;justify-content:center;" >
+  <div style=" width:390px; max-width:90%; background:white; border-radius:12px; padding:24px; box-shadow:0 10px 30px rgba(0,0,0,0.2); " >
+    <div style=" text-align:center; margin-bottom:18px; " >
+      <div style=" font-size:17px; font-weight:700; color:#3d3223; " > Mark as Wrong Number? </div>
+      <div style=" font-size:11px; color:#999; margin-top:5px; line-height:1.5; " > This lead will be returned to the Lead Gen Specialist for re-mining and the current grace-period countdown will be paused. </div>
+    </div>
+
+    <div id="wrongNumberLeadInfo" style=" background:#f7f5f0; border-radius:8px; padding:12px; margin-bottom:18px; font-size:12px; color:#5d4e37; " > - </div>
+    <div id="wrongNumberError" style=" display:none; background:#fff3f3; color:#c62828; border:1px solid #f1c4c4; border-radius:7px; padding:9px; font-size:11px; margin-bottom:12px; " ></div>
+    <div style=" display:flex; justify-content:flex-end; gap:8px; " >
+      <button type="button" onclick="closeWrongNumberModal()" style=" padding:9px 16px; background:#888; color:white; border:none; border-radius:7px; cursor:pointer; font-size:12px; " > Cancel </button>
+      <button type="button" id="confirmWrongNumberBtn" onclick="confirmWrongNumber()" style=" padding:9px 16px; background:#d35400; color:white; border:none; border-radius:7px; cursor:pointer; font-size:12px; " > Mark as Wrong Number </button>
+
+    </div>
+  </div>
+</div>
 
 <button id="addEntryBtn" onclick="openEntryModal()" style="position:fixed;bottom:28px;right:28px;background:#2e7d32;color:white;border:none;border-radius:12px;padding:10px 18px;font-size:13px;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);opacity:0.75;z-index:100;" title="Add Entry">+ Entry</button>
   <button id="addUserBtn" onclick="openUserModal()" style="position:fixed;bottom:70px;right:28px;background:#145ee9;color:white;border:none;border-radius:12px;padding:10px 18px;font-size:13px;font-weight:500;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.2);opacity:0.75;z-index:100;" title="Add User">+ User</button>
